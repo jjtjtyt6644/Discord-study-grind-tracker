@@ -88,8 +88,9 @@
         </div>
         <button class="cta" id="studyBtn"><span id="studyBtnText">Start studying</span><kbd>Space</kbd></button>
         <form class="add" id="addForm">
-          <input type="number" id="addMin" min="1" max="720" placeholder="Forgot the timer? Add minutes" required>
-          <button type="submit">Add</button>
+          <input type="number" id="addMin" min="1" max="1440" placeholder="Fix today's time: minutes" required aria-label="Minutes to add or remove">
+          <button type="submit" value="add" title="Add minutes you forgot to track">+ Add</button>
+          <button type="submit" value="remove" class="rm-btn" title="Take minutes off today (newest time first)">− Remove</button>
         </form>
       </article>
 

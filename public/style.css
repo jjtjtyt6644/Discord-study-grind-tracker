@@ -558,6 +558,13 @@ button.badge { font: inherit; color: inherit; cursor: pointer; width: 100%; }
 .ldel:hover { color: var(--warn); border-color: var(--line-2); }
 .ldel.armed { color: var(--ink); background: var(--warn); border-color: var(--warn); }
 .lrow.legacy { border-style: dashed; border-color: var(--line-2); }
+button.ldur { border: 1px dashed transparent; border-radius: 6px; padding: 2px 6px; background: none; color: var(--text); cursor: text; }
+button.ldur:hover { border-color: var(--line-2); background: var(--surface-3); }
+.ledit { margin-left: auto; width: 74px; height: 28px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--accent); background: rgba(0,0,0,.4); color: var(--text); font: 700 13px var(--mono); }
+.add .rm-btn:hover { border-color: var(--warn); color: var(--warn); }
+#addForm { flex-wrap: wrap; }
+#addForm input { flex: 1 1 100%; }
+#addForm button { flex: 1; }
 .log .empty { padding: 10px 4px; color: var(--muted); font-size: 13px; list-style: none; }
 
 /* ============ steam achievements v2 ============ */
@@ -732,6 +739,7 @@ button.chip:hover { border-color: var(--accent); color: var(--text); }
   box-shadow: 0 16px 40px -16px var(--accent); font: 600 14px var(--display); transition: opacity .3s, transform .3s;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.err { border-color: var(--warn); color: #ffd1da; box-shadow: 0 16px 40px -16px var(--warn); }
 
 /* ============ keyframes ============ */
 @keyframes drift { from { transform: translateX(0); } to { transform: translateX(-12vw); } }

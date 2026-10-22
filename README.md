@@ -117,6 +117,7 @@ Within about 15 seconds of connecting, your Discord profile shows the activity c
 | --- | --- |
 | Start / stop studying | Click **Start studying**, or press <kbd>Space</kbd> anywhere on the page |
 | Tag what you're studying | Click a subject chip above the timer, a row in the **Subjects** card, or press <kbd>1</kbd>–<kbd>9</kbd> (again to clear). Add or remove subjects in the **Subjects** card |
+| Added too much time | Type the minutes and press **− Remove** (takes the newest time off first), or click any duration in **Today's log** and type the right amount |
 | Fix a mistake | In **Today's log**, click **×** and then **Delete?** on the entry |
 | Back up your history | **Export CSV** in Today's log, or ⚙ → *Download my study history* |
 | Learn everything | Open **Guide** (top of the dashboard) or press <kbd>?</kbd> for shortcuts |
@@ -165,7 +166,7 @@ Steam only shares achievements when your profile's **Game details** are **Public
 
 **Today's total looks way too high**
 
-Open **Today's log** and delete the wrong entry with **×** → **Delete?**. Time added before the log existed shows up as **"+ added earlier"** and can be deleted the same way. Added time can't push a single day past 24 hours.
+Type the extra minutes into the box under the timer and press **− Remove**, or open **Today's log** and either click a duration to change it or delete the entry with **×** → **Delete?**. Time added before the log existed shows up as **"+ added earlier"** and can be deleted the same way. Added time can't push a single day past 24 hours.
 
 **"Steam rejected the API key"**
 

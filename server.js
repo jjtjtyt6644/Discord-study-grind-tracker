@@ -98,6 +98,40 @@ function todayLog() {
   return log.sort((a, b) => b.at - a.at);
 }
 
+// shrink (or with a negative t, grow) one "added minutes" entry, keeping the day's totals in sync
+function trimEntry(d, e, t) {
+  e.minutes -= t;
+  d.manualMinutes -= t;
+  if (e.subject) {
+    d.manualBySubject ??= {};
+    d.manualBySubject[e.subject] = Math.max(0, (d.manualBySubject[e.subject] ?? 0) - t);
+    if (!d.manualBySubject[e.subject]) delete d.manualBySubject[e.subject];
+  }
+  if (e.minutes <= 0) d.manualEntries.splice(d.manualEntries.indexOf(e), 1);
+}
+
+// Remove up to m minutes from today: newest added time, then older added time,
+// then finished sessions (newest first, trimmed from the end), then the running timer.
+function removeMinutes(m) {
+  const d = day();
+  let left = m;
+  const take = (available) => {
+    const t = Math.min(left, Math.max(0, available));
+    left -= t;
+    return t;
+  };
+  const entries = d.manualEntries ?? [];
+  for (const e of [...entries].sort((a, b) => b.at - a.at)) if (left > 0) trimEntry(d, e, take(e.minutes));
+  const legacy = d.manualMinutes - entries.reduce((sum, e) => sum + e.minutes, 0);
+  if (left > 0 && legacy > 0) d.manualMinutes -= take(legacy);
+  for (const s of [...d.sessions].sort((a, b) => b.start - a.start)) if (left > 0) s.end -= take((s.end - s.start) / 60_000) * 60_000;
+  d.sessions = d.sessions.filter((s) => s.end - s.start >= 30_000); // drop sessions trimmed to nothing
+  if (left > 0 && data.activeStudy && dayKey(new Date(data.activeStudy)) === dayKey()) {
+    data.activeStudy = Math.min(Date.now(), data.activeStudy + take((Date.now() - data.activeStudy) / 60_000) * 60_000);
+  }
+  return m - left;
+}
+
 function exportCsv() {
   const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const time = (t) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -374,6 +408,41 @@ const routes = {
     save();
   },
   // remove a finished session or an "added minutes" entry, e.g. a timer left running by mistake
+  // take minutes off today, newest time first (see removeMinutes)
+  "POST /api/study/remove": async (body) => {
+    const minutes = Math.round(Number(body.minutes));
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) throw new Error("minutes must be 1-1440");
+    const today = Math.floor(studyMin(dayKey()));
+    if (today < 1) throw new Error("There's no study time today to remove");
+    const removed = removeMinutes(Math.min(minutes, today));
+    save();
+    return { removed: Math.round(removed) };
+  },
+  // set one log entry to an exact length; timed sessions can only get shorter
+  "POST /api/study/edit": async (body) => {
+    const at = Number(body.at);
+    const minutes = Math.round(Number(body.minutes));
+    if (!Number.isFinite(minutes) || minutes < 1) throw new Error("Use at least 1 minute (or delete the entry)");
+    const d = data.days[dayKey(new Date(at))];
+    if (!d) throw new Error("Entry not found");
+    if (body.kind === "session") {
+      const s = d.sessions.find((x) => x.start === at);
+      if (!s) throw new Error("Session not found");
+      if (minutes > (s.end - s.start) / 60_000 + 0.5) throw new Error("Timed sessions can only be shortened. Use Add for extra time");
+      s.end = s.start + minutes * 60_000;
+    } else if (body.kind === "added") {
+      const e = (d.manualEntries ?? []).find((x) => x.at === at);
+      if (!e) throw new Error("Entry not found");
+      const delta = minutes - e.minutes;
+      if (delta > 0 && studyMin(dayKey(new Date(at))) + delta > 1440) throw new Error("That would put the day over 24 hours");
+      trimEntry(d, e, -delta);
+    } else if (body.kind === "legacy") {
+      const legacy = d.manualMinutes - (d.manualEntries ?? []).reduce((sum, e) => sum + e.minutes, 0);
+      if (minutes > legacy) throw new Error("Earlier added time can only be lowered");
+      d.manualMinutes -= legacy - minutes;
+    } else throw new Error("kind must be session, added or legacy");
+    save();
+  },
   "POST /api/study/delete": async (body) => {
     const at = Number(body.at);
     const d = data.days[dayKey(new Date(at))];

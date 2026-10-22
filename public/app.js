@@ -818,6 +818,7 @@ const clock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minut
 
 function renderLog() {
   const list = $("log");
+  if (list.querySelector(".ledit")) return; // don't wipe a duration someone is editing
   const log = stats.study.log;
   const sig = JSON.stringify(log.map((x) => [x.kind, x.at, x.kind === "live" ? 0 : x.minutes, x.subject]));
   if (list.dataset.sig === sig) return;
@@ -829,7 +830,12 @@ function renderLog() {
       const when = x.kind === "added" ? `+ added at ${clock(x.at)}` : x.kind === "legacy" ? "+ added earlier" : `${clock(x.at)} – ${x.kind === "live" ? "now" : clock(x.end)}`;
       const tag = el("span", "ltag", x.subject ?? "untagged");
       if (x.subject) tag.style.setProperty("--c", colorFor(x.subject));
-      const dur = el("span", "ldur", x.kind === "live" ? "live" : hm(x.minutes).replace(/^0h /, ""));
+      const dur = el(x.kind === "live" ? "span" : "button", "ldur", x.kind === "live" ? "live" : hm(x.minutes).replace(/^0h /, ""));
+      if (x.kind !== "live") {
+        dur.type = "button";
+        dur.title = x.kind === "session" ? "Click to shorten this session" : "Click to change this amount";
+        dur.addEventListener("click", () => editDuration(li, dur, x));
+      }
       li.append(el("span", "lwhen", when), tag, dur);
       if (x.kind !== "live") {
         // two-step delete: first click arms it, second click within 3s deletes
@@ -850,7 +856,7 @@ function renderLog() {
             apply(await api("/api/study/delete", { kind: x.kind, at: x.at }));
             toast("Entry deleted");
           } catch (err) {
-            showNotice(err.message);
+            toast(err.message, true);
           }
         });
         li.append(del);
@@ -858,6 +864,42 @@ function renderLog() {
       return li;
     })
   );
+}
+
+// swap the duration for a small number field; Enter saves, Esc cancels
+function editDuration(li, dur, x) {
+  const input = el("input", "ledit");
+  input.type = "number";
+  input.min = "1";
+  input.value = String(Math.max(1, x.minutes));
+  input.setAttribute("aria-label", "Minutes");
+  if (x.kind !== "added") input.max = String(Math.max(1, x.minutes));
+  dur.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const minutes = Number(input.value);
+    if (!save || !minutes || minutes === x.minutes) {
+      input.replaceWith(dur);
+      return;
+    }
+    input.replaceWith(dur); // close the editor first so the log can re-render with the new value
+    try {
+      $("log").dataset.sig = "";
+      apply(await api("/api/study/edit", { kind: x.kind, at: x.at, minutes }));
+      toast(`Changed to ${hm(minutes)}`);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") finish(true);
+    if (e.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
 }
 
 /* ================= long-session check ================= */
@@ -926,8 +968,18 @@ addEventListener("keydown", (e) => {
 $("addForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const input = $("addMin");
+  const remove = e.submitter?.value === "remove";
+  const minutes = Number(input.value);
   try {
-    apply(await api("/api/study/add", { minutes: Number(input.value) }));
+    if (remove) {
+      const out = await api("/api/study/remove", { minutes });
+      apply(out);
+      toast(out.result.removed < minutes ? `Removed ${hm(out.result.removed)} (that's all of today)` : `Removed ${hm(out.result.removed)} from today`);
+    } else {
+      if (minutes > 720) throw new Error("Add up to 720 minutes at a time");
+      apply(await api("/api/study/add", { minutes }));
+      toast(`Added ${hm(minutes)}`);
+    }
     input.value = "";
   } catch (err) {
     showNotice(err.message);
@@ -951,9 +1003,10 @@ const store = {
   },
 };
 
-function toast(msg) {
+function toast(msg, isError = false) {
   const t = $("toast");
   t.textContent = msg;
+  t.classList.toggle("err", isError);
   t.classList.add("show");
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => t.classList.remove("show"), 3500);
