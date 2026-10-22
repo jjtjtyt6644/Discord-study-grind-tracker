@@ -94,7 +94,7 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Added too much time | Type minutes → **− Remove** (newest time first), or click a duration in **Today's log** |
 | Delete an entry | **Today's log** → **×** → **Delete?** |
 | Change goal / game budget | ⚙ **Settings** (or <kbd>G</kbd>) |
-| Start with Windows / keep running after closing / Quit | ⚙ **Settings** (desktop app) |
+| Settings | ⚙ (top right) or <kbd>G</kbd>: **Goals** (presets or custom), **App** (Start with Windows, keep running, Quit), **Updates**, **Connections**, **Data & backups**, **Shortcuts**. Everything saves instantly |
 | Update | Automatic: click **Restart now** on the banner when one is ready. Or ⚙ **Settings → Check for updates** |
 | Back up your history | **Export CSV** in Today's log, or ⚙ → *Download my study history* |
 | Learn everything | **Guide** at the top of the dashboard, or <kbd>?</kbd> for shortcuts |
@@ -110,7 +110,16 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Log | `%APPDATA%\GrindTracker\grind-tracker.log` | the terminal |
 | Custom art | drop `bg.jpg` / `logo-small.png` into `%APPDATA%\GrindTracker\img\` | replace files in `public/img/` |
 
-Paste `%APPDATA%\GrindTracker` into File Explorer's address bar to open the folder. **Updates install themselves.** When a new version is out, the app downloads it, checks it against the SHA-256 GitHub publishes, swaps it in, and shows **Restart now**. Your data stays where it is. If the exe sits somewhere it can't write to (like Program Files), you get a download link instead. Moving from source to the exe? Copy your `data.json` and `.env` into `%APPDATA%\GrindTracker`.
+Open the folder from ⚙ **Settings → Data & backups**, or paste `%APPDATA%\GrindTracker` into File Explorer.
+
+**Your history is protected:**
+- Saves are atomic (written to a temp file, then swapped in), so a crash or power cut can't leave a half-written file.
+- A backup is made every day (the last 14 are kept in `backups\`) and right before every update.
+- If `data.json` is ever missing or damaged, the newest backup is restored automatically. A damaged file is set aside, never deleted.
+
+**Updates install themselves.** The app checks GitHub 5 seconds after it starts, every 30 minutes, and whenever you open the window. A new version downloads in the background (with progress in the banner), is checked against the SHA-256 GitHub publishes, and is swapped in. If the window is open you get **Restart now**; if it's closed, the app switches over on its own. Updates only replace the exe, never your data folder. If the exe sits somewhere it can't write to (like Program Files), you get a download link instead.
+
+Moving from source to the exe? Copy your `data.json` and `.env` into `%APPDATA%\GrindTracker`.
 
 ---
 
@@ -169,7 +178,7 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
    git push origin v1.0.1
    ```
 
-3. Actions builds the exe on Windows and creates the release with `GrindTracker.exe` attached. That takes about 3 minutes. You can watch it under the repo's **Actions** tab. Within 6 hours (or on their next launch), everyone's app picks up the update.
+3. Actions builds the exe on Windows and creates the release with `GrindTracker.exe` attached. That takes about 3 minutes. You can watch it under the repo's **Actions** tab. Within about 30 minutes (or as soon as they open the app), everyone's copy picks up the update.
 
 ### How it works
 
@@ -177,7 +186,8 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
 | --- | --- |
 | `server.js` | Local web server (only reachable from your PC): study sessions, subjects, log, settings, and the `/api/*` the dashboard uses |
 | `desktop.js` | What's different in the exe: data folder, the app window (Edge/Chrome app mode), Start with Windows, log file |
-| `updater.js` | Checks GitHub Releases, downloads + verifies the new exe, swaps it in, and restarts |
+| `updater.js` | Checks GitHub Releases, streams + verifies the new exe, swaps it in, and restarts |
+| `store.js` | Saves study data atomically, keeps daily + pre-update backups, restores from backup if the file is damaged |
 | `steam.js` | Steam Web API: profile, play time, achievements and global rarity. Demo data when not connected |
 | `presence.js` | Builds the Discord card text and keeps the Rich Presence connection alive |
 | `progress.js` | XP, levels, ranks and badges, all calculated from your study history |

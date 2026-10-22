@@ -156,6 +156,7 @@ function render() {
   renderHeatmap();
   renderMarquee();
   renderUpdate();
+  if (settingsDlg.open) renderSettings();
   maybeOpenSetup();
 }
 
@@ -165,7 +166,7 @@ function renderUpdate() {
   const bar = $("updateBar");
   if (!u) return (bar.hidden = true);
   const dismissed = store.get("gt-update-dismissed") === u.latest;
-  const sig = JSON.stringify([u.status, u.latest, u.error, dismissed]);
+  const sig = JSON.stringify([u.status, u.latest, u.error, dismissed, Math.round((u.progress ?? 0) * 100)]);
   if (bar.dataset.sig === sig) return;
   bar.dataset.sig = sig;
 
@@ -192,7 +193,12 @@ function renderUpdate() {
   if (u.status === "ready") {
     parts = [el("span", "ub-dot"), el("b", null, `Grind Tracker v${u.latest} is installed.`), el("span", null, "Restart to start using it, or it'll be there next time you open the app."), btn("Restart now", "solid", restartForUpdate)];
   } else if (u.status === "downloading") {
-    parts = [el("span", "ub-spin"), el("b", null, `Downloading v${u.latest}…`), el("span", null, "You can keep studying.")];
+    const pct = Math.round((u.progress ?? 0) * 100);
+    const bar = el("span", "ub-bar");
+    const fill = el("i");
+    fill.style.width = `${pct}%`;
+    bar.append(fill);
+    parts = [el("span", "ub-spin"), el("b", null, `Downloading v${u.latest}… ${pct}%`), bar];
   } else if (u.status === "available" && !dismissed) {
     parts = [el("span", "ub-dot"), el("b", null, `v${u.latest} is out.`), u.canInstall ? btn("Install now", "solid", installUpdate) : link("Download ↗", u.url), link("What's new ↗", u.url), close];
   } else if (u.status === "error" && u.latest && u.latest !== stats.app.version && !dismissed) {
@@ -231,22 +237,6 @@ async function restartForUpdate() {
       $("restartMsg").textContent = "The new version didn't start. Open GrindTracker.exe again; it's already updated.";
     }
   }, 1000);
-}
-
-function renderUpdateSettings() {
-  const a = stats?.app ?? {};
-  const u = a.update ?? {};
-  $("autoUpdateRow").hidden = !a.desktop;
-  $("autoUpdateIn").checked = a.autoUpdate !== false;
-  const when = u.checkedAt ? ` · checked ${ago(u.checkedAt)}` : "";
-  $("updateStatus").textContent =
-    u.status === "current" ? `You're on the latest version (v${a.version})${when}`
-    : u.status === "ready" ? `v${u.latest} installed. Restart to use it`
-    : u.status === "downloading" ? `Downloading v${u.latest}…`
-    : u.status === "available" ? `v${u.latest} is available (you have v${a.version})`
-    : u.status === "checking" ? "Checking…"
-    : u.status === "error" ? `Update check failed: ${u.error}`
-    : `v${a.version}`;
 }
 
 function renderSteam(steam) {
@@ -1059,7 +1049,7 @@ addEventListener("keydown", (e) => {
     $("addMin").scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
     $("addMin").focus({ preventScroll: true });
   } else if (e.key === "g" || e.key === "G") {
-    $("settingsBtn").click();
+    openSettings();
   } else if (e.key === "c" || e.key === "C") {
     openSetup();
   } else if (e.key === "?") {
@@ -1168,84 +1158,181 @@ $("setupForm").addEventListener("submit", async (e) => {
 });
 $("discordChip").addEventListener("click", openSetup);
 $("notice").addEventListener("click", openSetup);
-$("openSetup").addEventListener("click", () => {
-  $("settings").close();
-  openSetup();
-});
+/* ================= settings ================= */
+const settingsDlg = $("settings");
+const PANE_TITLES = { goals: "Goals", app: "App", updates: "Updates", connections: "Connections", data: "Data & backups", shortcuts: "Keyboard shortcuts" };
 
-const dialog = $("settings");
-$("settingsBtn").addEventListener("click", () => {
-  $("goalIn").value = stats?.study.goalMinutes ?? 240;
-  $("budgetIn").value = stats?.played.budgetMinutes ?? 120;
-  const appInfo = stats?.app ?? {};
-  $("desktopOpts").hidden = !appInfo.autostartSupported;
-  $("quitBtn").hidden = !appInfo.desktop;
-  $("autostartIn").checked = Boolean(appInfo.autostart);
-  $("bgIn").checked = Boolean(appInfo.closeToBackground);
-  $("appMeta").textContent = `Grind Tracker v${appInfo.version ?? "?"}${appInfo.dataDir ? ` · your data: ${appInfo.dataDir}` : ""}`;
-  renderUpdateSettings();
-  dialog.showModal();
-});
+function showPane(name) {
+  document.querySelectorAll(".set-tab").forEach((t) => {
+    const on = t.dataset.pane === name;
+    t.classList.toggle("on", on);
+    t.setAttribute("aria-selected", String(on));
+  });
+  document.querySelectorAll(".set-pane").forEach((p) => p.classList.toggle("on", p.dataset.pane === name));
+  $("paneTitle").textContent = PANE_TITLES[name];
+}
+document.querySelectorAll(".set-tab").forEach((t) => t.addEventListener("click", () => showPane(t.dataset.pane)));
 
-// applies right away (not on Save) - it's a system setting, not a goal
+function openSettings(pane = "goals") {
+  showPane(pane);
+  renderSettings(true);
+  settingsDlg.showModal();
+}
+$("settingsBtn").addEventListener("click", () => openSettings());
+$("setClose").addEventListener("click", () => settingsDlg.close());
+// click on the dimmed backdrop closes it too
+settingsDlg.addEventListener("click", (e) => e.target === settingsDlg && settingsDlg.close());
+
+function flashSaved() {
+  const s = $("setSaved");
+  s.classList.remove("show");
+  void s.offsetWidth;
+  s.classList.add("show");
+}
+
+// everything in Settings saves the moment you change it
+async function saveSetting(body, okMsg) {
+  try {
+    apply(await api("/api/settings", body));
+    flashSaved();
+    if (okMsg) toast(okMsg);
+    renderSettings(true);
+    return true;
+  } catch (err) {
+    toast(err.message, true);
+    renderSettings(true);
+    return false;
+  }
+}
+
+/** Fill the panel from stats. `full` also resets inputs (not while someone is typing in them). */
+function renderSettings(full = false) {
+  if (!stats) return;
+  const a = stats.app ?? {};
+  const u = a.update ?? {};
+  $("setVer").textContent = `Grind Tracker v${a.version ?? "?"}`;
+
+  // goals
+  for (const [key, val] of [["goal", stats.study.goalMinutes], ["budget", stats.played.budgetMinutes]]) {
+    $(`${key}Val`).textContent = hm(val);
+    document.querySelectorAll(`.presets[data-target="${key}"] button`).forEach((b) => b.classList.toggle("on", Number(b.dataset.min) === val));
+    const input = $(`${key}In`);
+    if (full && document.activeElement !== input) input.value = val;
+  }
+
+  // app
+  $("desktopCard").hidden = !a.autostartSupported;
+  $("desktopNote").hidden = Boolean(a.autostartSupported);
+  $("quitCard").hidden = !a.desktop;
+  $("autostartIn").checked = Boolean(a.autostart);
+  $("bgIn").checked = Boolean(a.closeToBackground);
+
+  // updates
+  $("vcVer").textContent = `v${a.version ?? "?"}`;
+  $("autoUpdateCard").hidden = !a.desktop;
+  $("autoUpdateIn").checked = a.autoUpdate !== false;
+  const when = u.checkedAt ? ` · checked ${ago(u.checkedAt)}` : "";
+  $("updateStatus").textContent =
+    u.status === "current" ? `You're up to date${when}`
+    : u.status === "ready" ? `v${u.latest} is installed. Restart to switch over.`
+    : u.status === "downloading" ? `Downloading v${u.latest}… ${Math.round((u.progress ?? 0) * 100)}%`
+    : u.status === "available" ? `v${u.latest} is available.`
+    : u.status === "checking" ? "Checking GitHub…"
+    : u.status === "error" ? `Couldn't update: ${u.error}`
+    : "Not checked yet";
+  $("updateStatus").className = `vc-status ${u.status ?? ""}`;
+  $("vcBar").hidden = u.status !== "downloading";
+  $("vcFill").style.width = `${Math.round((u.progress ?? 0) * 100)}%`;
+  $("vcInstall").hidden = !(u.status === "available" && u.canInstall);
+  $("vcRestart").hidden = u.status !== "ready";
+  $("vcNotes").href = u.url ?? "#";
+
+  // connections
+  const c = stats.config ?? {};
+  const d = stats.discord ?? {};
+  $("connDiscord").textContent = !c.discordClientId ? "Not connected" : d.connected ? "Live on your profile" : "Waiting for the Discord desktop app";
+  $("connDiscordDot").className = "dot" + (d.connected ? " on" : c.discordClientId ? " warn" : "");
+  const steamName = stats.steam && !stats.steam.demo ? stats.steam.profile.name : null;
+  $("connSteam").textContent = steamName ? `Connected as ${steamName}` : c.steamApiKey ? "Key saved, profile not set" : "Not connected (showing demo data)";
+  $("connSteamDot").className = "dot" + (steamName ? " on" : c.steamApiKey ? " warn" : "");
+
+  // data
+  $("dataPath").textContent = a.dataDir ?? "data.json in the project folder";
+  const bk = a.backups;
+  $("backupInfo").textContent = !bk ? "-" : bk.count ? `${bk.count} saved · latest ${ago(bk.latest.at)}` : "First backup is made with today's first save";
+  document.querySelectorAll("[data-open]").forEach((b) => (b.hidden = !a.desktop));
+}
+
+document.querySelectorAll(".presets").forEach((group) =>
+  group.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const key = group.dataset.target === "goal" ? "goalMinutes" : "playBudgetMinutes";
+    saveSetting({ [key]: Number(b.dataset.min) }).then(() => (goalCelebrated = liveStudyMs() / 60000 >= stats.study.goalMinutes));
+  })
+);
+for (const [id, key] of [["goalIn", "goalMinutes"], ["budgetIn", "playBudgetMinutes"]]) {
+  const input = $(id);
+  let t;
+  // typed values save after a short pause (or right away on Enter / leaving the field)
+  const commit = () => {
+    clearTimeout(t);
+    const v = Math.round(Number(input.value));
+    if (!v || v < 1) return;
+    const current = key === "goalMinutes" ? stats.study.goalMinutes : stats.played.budgetMinutes;
+    if (v !== current) saveSetting({ [key]: v });
+  };
+  input.addEventListener("input", () => {
+    clearTimeout(t);
+    if (Number(input.value) >= 1) $(id.replace("In", "Val")).textContent = hm(Number(input.value));
+    t = setTimeout(commit, 700);
+  });
+  input.addEventListener("change", commit);
+  input.addEventListener("keydown", (e) => e.key === "Enter" && (e.preventDefault(), commit()));
+}
+
 $("autostartIn").addEventListener("change", async (e) => {
   try {
     apply(await api("/api/autostart", { enabled: e.target.checked }));
-    e.target.checked = stats.app.autostart;
+    flashSaved();
     toast(stats.app.autostart ? "Grind Tracker will start with Windows" : "Won't start with Windows anymore");
   } catch (err) {
-    e.target.checked = !e.target.checked;
     toast(err.message, true);
   }
+  renderSettings(true);
 });
-
-$("bgIn").addEventListener("change", async (e) => {
-  try {
-    apply(await api("/api/settings", { closeToBackground: e.target.checked }));
-    toast(e.target.checked ? "Closing the window keeps Grind Tracker running" : "Closing the window quits Grind Tracker");
-  } catch (err) {
-    e.target.checked = !e.target.checked;
-    toast(err.message, true);
-  }
-});
-
-$("autoUpdateIn").addEventListener("change", async (e) => {
-  try {
-    apply(await api("/api/settings", { autoUpdate: e.target.checked }));
-    toast(e.target.checked ? "Updates will install automatically" : "You'll be asked before updates install");
-  } catch (err) {
-    e.target.checked = !e.target.checked;
-    toast(err.message, true);
-  }
-});
+$("bgIn").addEventListener("change", (e) => saveSetting({ closeToBackground: e.target.checked }, e.target.checked ? "Closing the window keeps Grind Tracker running" : "Closing the window quits Grind Tracker"));
+$("autoUpdateIn").addEventListener("change", (e) => saveSetting({ autoUpdate: e.target.checked }, e.target.checked ? "Updates will install automatically" : "You'll be asked before updates install"));
 
 $("checkUpdate").addEventListener("click", async () => {
-  $("updateStatus").textContent = "Checking…";
+  $("updateStatus").textContent = "Checking GitHub…";
   try {
     apply(await api("/api/update/check", {}));
-    renderUpdateSettings();
-    const u = stats.app.update;
-    toast(u.status === "current" ? "You're up to date" : u.status === "ready" ? `v${u.latest} installed. Restart to use it` : u.status === "available" ? `v${u.latest} is available` : u.error ?? "Checked");
   } catch (err) {
     toast(err.message, true);
   }
+  renderSettings();
+});
+$("vcInstall").addEventListener("click", () => installUpdate().then(() => renderSettings()));
+$("vcRestart").addEventListener("click", () => {
+  settingsDlg.close();
+  restartForUpdate();
 });
 
+$("openSetup").addEventListener("click", () => {
+  settingsDlg.close();
+  openSetup();
+});
+document.querySelectorAll("[data-open]").forEach((b) =>
+  b.addEventListener("click", () => api("/api/open-folder", { which: b.dataset.open }).catch((err) => toast(err.message, true)))
+);
+
 $("quitBtn").addEventListener("click", async () => {
-  dialog.close();
+  settingsDlg.close();
   await api("/api/quit", {}).catch(() => {});
   window.close(); // works in the app window; in a normal tab the screen below explains instead
   $("quitScreen").hidden = false;
   document.title = "Grind Tracker (closed)";
-});
-dialog.addEventListener("close", async () => {
-  if (dialog.returnValue !== "save") return;
-  try {
-    apply(await api("/api/settings", { goalMinutes: Number($("goalIn").value), playBudgetMinutes: Number($("budgetIn").value) }));
-    goalCelebrated = liveStudyMs() / 60000 >= stats.study.goalMinutes;
-  } catch (err) {
-    showNotice(err.message);
-  }
 });
 
 tick();

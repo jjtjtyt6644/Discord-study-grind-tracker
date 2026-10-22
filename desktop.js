@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile, spawn } from "node:child_process";
 import { mkdirSync, appendFileSync, readFileSync, existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
 
 export const isDesktop = sea.isSea();
 
@@ -70,6 +71,10 @@ const APP_BROWSERS = [
   path.join(process.env.LOCALAPPDATA ?? "", "Google/Chrome/Application/chrome.exe"),
 ];
 
+// v2: the first profile folder ("window") got auto-signed-in by Edge; start clean and drop it
+const WINDOW_PROFILE = path.join(APP_DIR, "window-v2");
+if (isDesktop) rm(path.join(APP_DIR, "window"), { recursive: true, force: true }).catch(() => {});
+
 /** Opens the dashboard as an app window (or a normal browser tab if neither browser exists). */
 export function openAppWindow(url) {
   const browser = process.platform === "win32" && APP_BROWSERS.find((p) => existsSync(p));
@@ -81,12 +86,15 @@ export function openAppWindow(url) {
     browser,
     [
       `--app=${url}`,
-      `--user-data-dir=${path.join(APP_DIR, "window")}`,
+      `--user-data-dir=${WINDOW_PROFILE}`,
       "--window-size=1440,920",
       "--no-first-run",
       "--no-default-browser-check",
       "--disable-background-mode", // don't linger in the tray after the window closes
-      "--disable-features=msEdgeStartupBoost,msEdgeSidebarV2",
+      // Edge signs fresh profiles into the Windows Microsoft account and pops a "now syncing" dialog;
+      // this window is just a dashboard, so keep it signed out and unsynced
+      "--disable-sync",
+      "--disable-features=msImplicitSignin,msEdgeAutoSignIn,msSyncConsent,msEdgeStartupBoost,msEdgeSidebarV2",
       // keep the heartbeat ticking while minimized or covered by other windows
       "--disable-background-timer-throttling",
       "--disable-renderer-backgrounding",

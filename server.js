@@ -1,12 +1,14 @@
 import http from "node:http";
-import { readFile, writeFile } from "node:fs/promises";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFile, writeFile, rename } from "node:fs/promises";
+import { mkdirSync } from "node:fs";
+import { execFile } from "node:child_process";
 import path from "node:path";
 import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, openAppWindow, findPortOwner, askYesNo, closeProcess, autostartSupported, getAutostart, setAutostart } from "./desktop.js";
 import { getSteam, getAchievementsFor, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
 import { startPresence, updatePresence, presenceState, buildActivity } from "./presence.js";
 import { computeProgress } from "./progress.js";
-import { update, checkForUpdate, installLatest, restartIntoUpdate, startUpdateChecks } from "./updater.js";
+import { update, checkForUpdate, checkIfStale, installLatest, restartIntoUpdate, startUpdateChecks } from "./updater.js";
+import { createStore } from "./store.js";
 
 const ENV_FILE = process.env.ENV_FILE || path.join(APP_DIR, ".env");
 try {
@@ -30,20 +32,9 @@ const TYPES = {
 // ---------- persistence ----------
 const dayKey = (d = new Date()) => d.toLocaleDateString("en-CA"); // local YYYY-MM-DD
 
-function load() {
-  try {
-    return JSON.parse(readFileSync(DATA_FILE, "utf8"));
-  } catch {
-    return { settings: { goalMinutes: 240, playBudgetMinutes: 120 }, days: {}, activeStudy: null, gameSession: null };
-  }
-}
-const data = load();
-
-let saveTimer;
-function save() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => writeFile(DATA_FILE, JSON.stringify(data, null, 2)).catch(console.error), 200);
-}
+const store = createStore(DATA_FILE); // atomic saves + daily backups + restore (see store.js)
+const data = store.load();
+const save = () => store.save(data);
 
 const DEFAULT_SUBJECTS = ["Math", "Science", "Coding", "Language", "Reading"];
 data.subjects ??= DEFAULT_SUBJECTS;
@@ -243,7 +234,9 @@ async function writeEnv(updates) {
     else lines.push(`${k}=${v}`);
     process.env[k] = v;
   }
-  await writeFile(ENV_FILE, lines.join("\n").replace(/\n*$/, "\n"));
+  // write-then-rename so a crash mid-save can never leave a half-written keys file
+  await writeFile(`${ENV_FILE}.tmp`, lines.join("\n").replace(/\n*$/, "\n"));
+  await rename(`${ENV_FILE}.tmp`, ENV_FILE);
 }
 
 async function saveConfig(body) {
@@ -343,6 +336,7 @@ async function buildStats() {
       autostart,
       closeToBackground: Boolean(data.settings.closeToBackground),
       autoUpdate: data.settings.autoUpdate !== false,
+      backups: store.info(),
       update,
       dataDir: isDesktop ? APP_DIR : null,
     },
@@ -533,24 +527,22 @@ const routes = {
     await installLatest();
     if (update.status === "error") throw new Error(update.error);
   },
-  // free the port, then start the new exe; the open window keeps beating to the same port
   "POST /api/update/restart": async () => {
     if (update.status !== "ready") throw new Error("No update is waiting");
-    setTimeout(
-      () =>
-        restartIntoUpdate((done) => {
-          writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-          server.close();
-          server.closeAllConnections();
-          setTimeout(done, 300);
-        }),
-      200
-    );
+    setTimeout(restartNow, 200);
+  },
+  // Settings → Data: show the data or backups folder in Explorer (desktop app only)
+  "POST /api/open-folder": async (body) => {
+    if (!isDesktop) throw new Error("Open the project folder to find data.json");
+    const dir = body.which === "backups" ? store.info().folder : APP_DIR;
+    mkdirSync(dir, { recursive: true });
+    execFile("explorer", [dir]);
   },
   "POST /api/window": async () => {
     if (isDesktop) showWindow();
   },
   "POST /api/heartbeat": async () => {
+    if (!win.open && isDesktop) checkIfStale(autoInstall); // window just opened
     win.open = true;
     win.lastBeat = Date.now();
     clearTimeout(win.closing);
@@ -632,7 +624,7 @@ async function loadStatic(rel, file) {
 }
 
 function flushAndExit() {
-  writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  store.saveNow(data);
   process.exit(0);
 }
 
@@ -768,8 +760,29 @@ async function start() {
   startUpdater();
 }
 
+const autoInstall = () => data.settings.autoUpdate !== false;
+
+// free the port, then start the new exe; an open window keeps beating to the same port
+function restartNow() {
+  restartIntoUpdate((done) => {
+    store.saveNow(data);
+    server.close();
+    server.closeAllConnections();
+    setTimeout(done, 300);
+  });
+}
+
 function startUpdater() {
-  startUpdateChecks(() => data.settings.autoUpdate !== false);
+  startUpdateChecks(autoInstall, {
+    beforeInstall: (version) => store.backup(data, `before-v${version}`),
+    // nobody's looking at the window: switch to the new version right away, silently
+    onReady: () => {
+      if (!win.open) {
+        console.log("Window is closed; restarting into the update now");
+        setTimeout(restartNow, 1000);
+      }
+    },
+  });
 }
 
 start();
