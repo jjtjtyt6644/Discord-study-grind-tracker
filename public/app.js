@@ -155,7 +155,98 @@ function render() {
   renderProgress();
   renderHeatmap();
   renderMarquee();
+  renderUpdate();
   maybeOpenSetup();
+}
+
+/* ================= updates ================= */
+function renderUpdate() {
+  const u = stats.app?.update;
+  const bar = $("updateBar");
+  if (!u) return (bar.hidden = true);
+  const dismissed = store.get("gt-update-dismissed") === u.latest;
+  const sig = JSON.stringify([u.status, u.latest, u.error, dismissed]);
+  if (bar.dataset.sig === sig) return;
+  bar.dataset.sig = sig;
+
+  const link = (text, href) => {
+    const a = el("a", "ub-btn ghost", text);
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noopener";
+    return a;
+  };
+  const btn = (text, cls, fn) => {
+    const b = el("button", `ub-btn ${cls}`, text);
+    b.type = "button";
+    b.addEventListener("click", fn);
+    return b;
+  };
+  const close = btn("×", "ub-x", () => {
+    store.set("gt-update-dismissed", u.latest);
+    bar.hidden = true;
+  });
+  close.setAttribute("aria-label", "Dismiss");
+
+  let parts = null;
+  if (u.status === "ready") {
+    parts = [el("span", "ub-dot"), el("b", null, `Grind Tracker v${u.latest} is installed.`), el("span", null, "Restart to start using it, or it'll be there next time you open the app."), btn("Restart now", "solid", restartForUpdate)];
+  } else if (u.status === "downloading") {
+    parts = [el("span", "ub-spin"), el("b", null, `Downloading v${u.latest}…`), el("span", null, "You can keep studying.")];
+  } else if (u.status === "available" && !dismissed) {
+    parts = [el("span", "ub-dot"), el("b", null, `v${u.latest} is out.`), u.canInstall ? btn("Install now", "solid", installUpdate) : link("Download ↗", u.url), link("What's new ↗", u.url), close];
+  } else if (u.status === "error" && u.latest && u.latest !== stats.app.version && !dismissed) {
+    parts = [el("span", "ub-dot err"), el("b", null, `Couldn't install v${u.latest}.`), el("span", null, u.error ?? ""), link("Download manually ↗", u.url), close];
+  }
+  bar.hidden = !parts;
+  if (parts) bar.replaceChildren(...parts);
+}
+
+async function installUpdate() {
+  try {
+    toast("Downloading the update…");
+    apply(await api("/api/update/install", {}));
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function restartForUpdate() {
+  const target = stats.app.update.latest;
+  try {
+    await api("/api/update/restart", {});
+  } catch (err) {
+    return toast(err.message, true);
+  }
+  $("restartScreen").hidden = false;
+  // wait for the new version to answer on the same port, then load its dashboard
+  const started = Date.now();
+  const poll = setInterval(async () => {
+    const v = await fetch("/api/ping").then((r) => r.json()).then((j) => j.version).catch(() => null);
+    if (v === target) {
+      clearInterval(poll);
+      location.reload();
+    } else if (Date.now() - started > 40_000) {
+      clearInterval(poll);
+      $("restartMsg").textContent = "The new version didn't start. Open GrindTracker.exe again; it's already updated.";
+    }
+  }, 1000);
+}
+
+function renderUpdateSettings() {
+  const a = stats?.app ?? {};
+  const u = a.update ?? {};
+  $("autoUpdateRow").hidden = !a.desktop;
+  $("autoUpdateIn").checked = a.autoUpdate !== false;
+  const when = u.checkedAt ? ` · checked ${ago(u.checkedAt)}` : "";
+  $("updateStatus").textContent =
+    u.status === "current" ? `You're on the latest version (v${a.version})${when}`
+    : u.status === "ready" ? `v${u.latest} installed. Restart to use it`
+    : u.status === "downloading" ? `Downloading v${u.latest}…`
+    : u.status === "available" ? `v${u.latest} is available (you have v${a.version})`
+    : u.status === "checking" ? "Checking…"
+    : u.status === "error" ? `Update check failed: ${u.error}`
+    : `v${a.version}`;
 }
 
 function renderSteam(steam) {
@@ -1082,6 +1173,7 @@ $("settingsBtn").addEventListener("click", () => {
   $("autostartIn").checked = Boolean(appInfo.autostart);
   $("bgIn").checked = Boolean(appInfo.closeToBackground);
   $("appMeta").textContent = `Grind Tracker v${appInfo.version ?? "?"}${appInfo.dataDir ? ` · your data: ${appInfo.dataDir}` : ""}`;
+  renderUpdateSettings();
   dialog.showModal();
 });
 
@@ -1103,6 +1195,28 @@ $("bgIn").addEventListener("change", async (e) => {
     toast(e.target.checked ? "Closing the window keeps Grind Tracker running" : "Closing the window quits Grind Tracker");
   } catch (err) {
     e.target.checked = !e.target.checked;
+    toast(err.message, true);
+  }
+});
+
+$("autoUpdateIn").addEventListener("change", async (e) => {
+  try {
+    apply(await api("/api/settings", { autoUpdate: e.target.checked }));
+    toast(e.target.checked ? "Updates will install automatically" : "You'll be asked before updates install");
+  } catch (err) {
+    e.target.checked = !e.target.checked;
+    toast(err.message, true);
+  }
+});
+
+$("checkUpdate").addEventListener("click", async () => {
+  $("updateStatus").textContent = "Checking…";
+  try {
+    apply(await api("/api/update/check", {}));
+    renderUpdateSettings();
+    const u = stats.app.update;
+    toast(u.status === "current" ? "You're up to date" : u.status === "ready" ? `v${u.latest} installed. Restart to use it` : u.status === "available" ? `v${u.latest} is available` : u.error ?? "Checked");
+  } catch (err) {
     toast(err.message, true);
   }
 });

@@ -6,13 +6,17 @@ import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, op
 import { getSteam, getAchievementsFor, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
 import { startPresence, updatePresence, presenceState, buildActivity } from "./presence.js";
 import { computeProgress } from "./progress.js";
+import { update, checkForUpdate, installLatest, restartIntoUpdate, startUpdateChecks } from "./updater.js";
 
 const ENV_FILE = process.env.ENV_FILE || path.join(APP_DIR, ".env");
 try {
   process.loadEnvFile(ENV_FILE);
 } catch {}
 
-const PORT = Number(process.env.PORT) || 3000;
+// first choice; if it's taken by another program we walk up to BASE_PORT + PORT_TRIES
+const BASE_PORT = Number(process.env.PORT) || 3000;
+const PORT_TRIES = 20;
+let PORT = BASE_PORT; // the port we actually got (set once listening)
 const DATA_FILE = process.env.DATA_FILE || path.join(APP_DIR, "data.json");
 const PUBLIC = path.join(ROOT, "public");
 // cached: asking the registry on every refresh would be wasteful (no top-level await: the exe bundle is CommonJS)
@@ -44,6 +48,7 @@ function save() {
 const DEFAULT_SUBJECTS = ["Math", "Science", "Coding", "Language", "Reading"];
 data.subjects ??= DEFAULT_SUBJECTS;
 data.activeSubject ??= null;
+data.settings.autoUpdate ??= true;
 
 const day = (key = dayKey()) => (data.days[key] ??= { sessions: [], manualMinutes: 0, snapshot: null });
 const studyMin = (key) => studyMs(key) / 60_000;
@@ -337,6 +342,8 @@ async function buildStats() {
       autostartSupported,
       autostart,
       closeToBackground: Boolean(data.settings.closeToBackground),
+      autoUpdate: data.settings.autoUpdate !== false,
+      update,
       dataDir: isDesktop ? APP_DIR : null,
     },
   };
@@ -381,6 +388,8 @@ const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(n))));
 
 const routes = {
   "GET /api/stats": async () => buildStats(),
+  // cheap "are you Grind Tracker?" check used to find a running copy on any port
+  "GET /api/ping": async () => ({ app: "grind-tracker", version: VERSION }),
   "POST /api/study/start": async (body) => {
     if (body.subject !== undefined) data.activeSubject = checkSubject(body.subject);
     data.activeStudy ??= Date.now();
@@ -508,6 +517,27 @@ const routes = {
   "POST /api/quit": async () => {
     setTimeout(flushAndExit, 300);
   },
+  "POST /api/update/check": async () => {
+    await checkForUpdate({ autoInstall: data.settings.autoUpdate !== false });
+  },
+  "POST /api/update/install": async () => {
+    await installLatest();
+    if (update.status === "error") throw new Error(update.error);
+  },
+  // free the port, then start the new exe; the open window keeps beating to the same port
+  "POST /api/update/restart": async () => {
+    if (update.status !== "ready") throw new Error("No update is waiting");
+    setTimeout(
+      () =>
+        restartIntoUpdate((done) => {
+          writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+          server.close();
+          server.closeAllConnections();
+          setTimeout(done, 300);
+        }),
+      200
+    );
+  },
   "POST /api/window": async () => {
     if (isDesktop) showWindow();
   },
@@ -526,14 +556,15 @@ const routes = {
     if (body.goalMinutes != null) data.settings.goalMinutes = clamp(body.goalMinutes, 15, 1440);
     if (body.playBudgetMinutes != null) data.settings.playBudgetMinutes = clamp(body.playBudgetMinutes, 15, 1440);
     if (body.closeToBackground != null) data.settings.closeToBackground = Boolean(body.closeToBackground);
+    if (body.autoUpdate != null) data.settings.autoUpdate = Boolean(body.autoUpdate);
     save();
   },
 };
 
 // Only this machine's browser may talk to the API: other websites can't reach it (Origin check),
 // and DNS-rebinding tricks fail the Host check.
-const LOCAL_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
 function isLocalRequest(req) {
+  const LOCAL_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
   if (!LOCAL_HOSTS.has(req.headers.host)) return false;
   const origin = req.headers.origin;
   if (origin && !LOCAL_HOSTS.has(origin.replace(/^http:\/\//, ""))) return false;
@@ -596,18 +627,17 @@ function flushAndExit() {
   process.exit(0);
 }
 
-const URL_HOME = `http://localhost:${PORT}`;
+const urlHome = () => `http://localhost:${PORT}`;
 const background = process.argv.includes("--background"); // started by Windows at login: stay quiet
 
 // ---------- the app window (desktop exe only) ----------
 // The window's page (bg.js) sends a heartbeat every few seconds and a "closing" beacon when it
 // goes away. A beacon with no new heartbeat shortly after (i.e. not just a page change), or a
 // long silence (crash, force-close), means the window is gone: quit and free the port.
-const WINDOW_URL = `${URL_HOME}/?window=1`;
 const win = { open: false, lastBeat: 0, closing: null };
 
 function showWindow() {
-  openAppWindow(WINDOW_URL);
+  openAppWindow(`${urlHome()}/?window=1`);
 }
 
 function windowGone(why) {
@@ -624,21 +654,63 @@ setInterval(() => {
   if (win.open && Date.now() - win.lastBeat > 45_000) windowGone("no heartbeat");
 }, 5_000).unref();
 
-server.on("error", async (e) => {
-  if (e.code !== "EADDRINUSE") throw e;
-  // already running (e.g. double-clicked twice): just bring up the dashboard
-  const alive = await fetch(`${URL_HOME}/api/stats`, { signal: AbortSignal.timeout(3000) }).then((r) => r.ok).catch(() => false);
-  if (alive) {
-    // ask the running copy to open its window (or a browser tab, from source)
-    if (!background) await fetch(`${URL_HOME}/api/window`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => {});
+// Is Grind Tracker already running on one of our ports? (/api/ping is cheap, unlike /api/stats)
+async function findRunningCopy() {
+  const ports = Array.from({ length: PORT_TRIES + 1 }, (_, i) => BASE_PORT + i);
+  const hits = await Promise.all(
+    ports.map((p) =>
+      fetch(`http://localhost:${p}/api/ping`, { signal: AbortSignal.timeout(1500) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => (j?.app === "grind-tracker" ? p : null))
+        .catch(() => null)
+    )
+  );
+  return hits.find(Boolean) ?? null;
+}
+
+const listenOn = (port) =>
+  new Promise((resolve, reject) => {
+    const fail = (e) => {
+      server.off("listening", ok);
+      reject(e);
+    };
+    const ok = () => {
+      server.off("error", fail);
+      resolve();
+    };
+    server.once("error", fail);
+    server.once("listening", ok);
+    server.listen(port, "127.0.0.1");
+  });
+
+async function start() {
+  const running = await findRunningCopy();
+  if (running) {
+    // already open (double-clicked again, or started with Windows): just bring up its window
+    if (!background) {
+      await fetch(`http://localhost:${running}/api/window`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => {});
+    }
     process.exit(0);
   }
-  console.error(`Port ${PORT} is used by another program. Set a different PORT in ${ENV_FILE}`);
-  process.exit(1);
-});
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`✓ Grind Tracker ${VERSION} running at ${URL_HOME}${isDesktop ? ` (data: ${APP_DIR})` : ""}`);
+  let bound = false;
+  for (let p = BASE_PORT; p <= BASE_PORT + PORT_TRIES && !bound; p++) {
+    try {
+      await listenOn(p);
+      PORT = p;
+      bound = true;
+    } catch (e) {
+      // EADDRINUSE: another program has it. EACCES: Windows reserves some port ranges (Hyper-V, WSL...)
+      if (e.code !== "EADDRINUSE" && e.code !== "EACCES") throw e;
+      console.warn(`Port ${p} is unavailable (${e.code}), trying ${p + 1}`);
+    }
+  }
+  if (!bound) {
+    console.error(`Ports ${BASE_PORT}-${BASE_PORT + PORT_TRIES} are all in use. Set a different PORT in ${ENV_FILE}`);
+    process.exit(1);
+  }
+
+  console.log(`✓ Grind Tracker ${VERSION} running at ${urlHome()}${isDesktop ? ` (data: ${APP_DIR})` : ""}`);
   if (!process.env.STEAM_API_KEY || !process.env.STEAM_ID64) console.log("  Steam: demo mode (connect it in the dashboard)");
   if (!process.env.DISCORD_CLIENT_ID) console.log("  Discord: off (connect it in the dashboard)");
   if (isDesktop && !background) showWindow();
@@ -646,6 +718,13 @@ server.listen(PORT, "127.0.0.1", () => {
   startPresence(process.env.DISCORD_CLIENT_ID);
   setInterval(pushPresence, 15_000);
   pushPresence();
-});
+  startUpdater();
+}
+
+function startUpdater() {
+  startUpdateChecks(() => data.settings.autoUpdate !== false);
+}
+
+start();
 
 process.on("SIGINT", flushAndExit);

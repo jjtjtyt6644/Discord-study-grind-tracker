@@ -50,6 +50,7 @@ You also need the **Discord desktop app** running. Rich Presence doesn't work in
 - A **Rich Presence card** that updates every 15s: study and play time, level, current subject or game, and a goal bar.
 
 **App**
+- **Auto-updates**: the app checks GitHub for new versions, downloads and verifies them in the background, and asks you to restart. You can turn this off in Settings.
 - **Desktop app**: one `.exe` that opens in its own window. Closing the window quits it and frees the port, unless you turn on **Keep running when I close the window** so Discord keeps showing your stats. Also **Start with Windows** and **Quit** in Settings.
 - **Built-in Guide and About pages**, keyboard shortcuts (<kbd>?</kbd>), and **CSV export** of your full history.
 - **Dashboard**: aurora background, a character panel (Reze by default) with mode-colored tint and speech bubbles.
@@ -94,6 +95,7 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Delete an entry | **Today's log** → **×** → **Delete?** |
 | Change goal / game budget | ⚙ **Settings** (or <kbd>G</kbd>) |
 | Start with Windows / keep running after closing / Quit | ⚙ **Settings** (desktop app) |
+| Update | Automatic: click **Restart now** on the banner when one is ready. Or ⚙ **Settings → Check for updates** |
 | Back up your history | **Export CSV** in Today's log, or ⚙ → *Download my study history* |
 | Learn everything | **Guide** at the top of the dashboard, or <kbd>?</kbd> for shortcuts |
 
@@ -108,7 +110,7 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Log | `%APPDATA%\GrindTracker\grind-tracker.log` | the terminal |
 | Custom art | drop `bg.jpg` / `logo-small.png` into `%APPDATA%\GrindTracker\img\` | replace files in `public/img/` |
 
-Paste `%APPDATA%\GrindTracker` into File Explorer's address bar to open the folder. **To update the app**, download the new `GrindTracker.exe` and replace the old one; your data stays where it is. Moving from source to the exe? Copy your `data.json` and `.env` into `%APPDATA%\GrindTracker`.
+Paste `%APPDATA%\GrindTracker` into File Explorer's address bar to open the folder. **Updates install themselves.** When a new version is out, the app downloads it, checks it against the SHA-256 GitHub publishes, swaps it in, and shows **Restart now**. Your data stays where it is. If the exe sits somewhere it can't write to (like Program Files), you get a download link instead. Moving from source to the exe? Copy your `data.json` and `.env` into `%APPDATA%\GrindTracker`.
 
 ---
 
@@ -132,7 +134,7 @@ Paste `%APPDATA%\GrindTracker` into File Explorer's address bar to open the fold
 
 **Double-clicked the exe and nothing new started**: it's already running, so it just opens its window again.
 
-**Port already in use**: another program uses port 3000. Add `PORT=3100` (or any free port) to your `.env` and restart.
+**Port 3000 is taken by another program**: nothing to do. Grind Tracker automatically tries 3001, 3002, … up to 3020, and opening the exe again still finds it. To pick the starting port yourself, add `PORT=3100` to your `.env`.
 
 ---
 
@@ -159,7 +161,7 @@ Then open <http://localhost:3000>.
 
 Releases are built by GitHub Actions (`.github/workflows/release.yml`):
 
-1. Bump `"version"` in `package.json` and commit.
+1. Bump `"version"` in `package.json` and commit. Installed apps compare against this, so a higher version is what triggers their auto-update.
 2. Tag and push:
 
    ```bash
@@ -167,7 +169,7 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
    git push origin v1.0.1
    ```
 
-3. Actions builds the exe on Windows and creates the release with `GrindTracker.exe` attached. That takes about 3 minutes. You can watch it under the repo's **Actions** tab.
+3. Actions builds the exe on Windows and creates the release with `GrindTracker.exe` attached. That takes about 3 minutes. You can watch it under the repo's **Actions** tab. Within 6 hours (or on their next launch), everyone's app picks up the update.
 
 ### How it works
 
@@ -175,6 +177,7 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
 | --- | --- |
 | `server.js` | Local web server (only reachable from your PC): study sessions, subjects, log, settings, and the `/api/*` the dashboard uses |
 | `desktop.js` | What's different in the exe: data folder, the app window (Edge/Chrome app mode), Start with Windows, log file |
+| `updater.js` | Checks GitHub Releases, downloads + verifies the new exe, swaps it in, and restarts |
 | `steam.js` | Steam Web API: profile, play time, achievements and global rarity. Demo data when not connected |
 | `presence.js` | Builds the Discord card text and keeps the Rich Presence connection alive |
 | `progress.js` | XP, levels, ranks and badges, all calculated from your study history |

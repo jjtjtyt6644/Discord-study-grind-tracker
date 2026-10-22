@@ -48,6 +48,7 @@
     </header>
 
     <button class="notice" id="notice" hidden></button>
+    <div class="update-bar" id="updateBar" role="status" hidden></div>
 
     <!-- hero: the first screen -->
     <section class="hero">
@@ -289,6 +290,13 @@
           <input type="checkbox" id="bgIn" role="switch">
         </label>
       </div>
+      <div class="updates">
+        <label class="switch-row" id="autoUpdateRow" hidden>
+          <span>Install updates automatically<small>New versions download in the background; restart when it suits you</small></span>
+          <input type="checkbox" id="autoUpdateIn" role="switch">
+        </label>
+        <div class="update-line"><span id="updateStatus"></span><button type="button" class="link-btn" id="checkUpdate">Check for updates</button></div>
+      </div>
       <p class="muted small">Tip: press <kbd>?</kbd> on the dashboard to see keyboard shortcuts.</p>
       <p class="muted small app-meta" id="appMeta"></p>
       <div class="dialog-actions">
@@ -326,6 +334,10 @@
       </div>
     </form>
   </dialog>
+
+  <div class="quit-screen" id="restartScreen" hidden>
+    <div><b>Updating…</b><p id="restartMsg">Restarting Grind Tracker with the new version. This takes a few seconds.</p></div>
+  </div>
 
   <div class="quit-screen" id="quitScreen" hidden>
     <div><b>Grind Tracker is closed</b><p>Your progress is saved. Open GrindTracker.exe again any time. You can close this tab.</p></div>

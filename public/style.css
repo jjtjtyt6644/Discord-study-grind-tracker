@@ -688,6 +688,27 @@ body.no-art .about-art { display: none; }
   .toc { grid-template-columns: 1fr; }
 }
 
+/* ============ update banner + settings ============ */
+.update-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0 0; padding: 12px 16px; border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  font-size: 13px; animation: rise .4s cubic-bezier(.2,.8,.2,1);
+}
+.update-bar[hidden] { display: none; }
+.update-bar b { font: 600 14px var(--display); }
+.update-bar > span:not(.ub-dot):not(.ub-spin) { color: var(--muted); flex: 1; min-width: 160px; }
+.ub-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); flex: none; }
+.ub-dot.err { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
+.ub-spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; }
+.ub-btn { height: 32px; padding: 0 14px; border-radius: 8px; display: inline-flex; align-items: center; text-decoration: none; cursor: pointer; font: 600 12px var(--display); letter-spacing: .04em; }
+.ub-btn.solid { background: var(--accent); color: var(--ink); border: 0; }
+.ub-btn.ghost { border: 1px solid var(--line-2); color: var(--text); background: none; }
+.ub-x { width: 32px; justify-content: center; padding: 0; border: 0; background: none; color: var(--muted); font-size: 18px; }
+.updates { margin-top: 14px; }
+.update-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.update-line .link-btn { margin: 0; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ============ settings: desktop options ============ */
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 14px 0 4px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); cursor: pointer; }
 .switch-row span { display: grid; gap: 2px; font-weight: 500; }
