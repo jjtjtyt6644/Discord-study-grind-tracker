@@ -104,6 +104,41 @@ export function openBrowser(url) {
   else execFile("xdg-open", [url]);
 }
 
+// ---------- port conflicts ----------
+const run = (cmd, args, env) =>
+  new Promise((resolve) => execFile(cmd, args, { windowsHide: true, env: { ...process.env, ...env } }, (err, stdout) => resolve(err ? "" : String(stdout))));
+
+// never offer to close these, whatever is holding the port
+const PROTECTED = new Set(["system", "svchost.exe", "lsass.exe", "services.exe", "wininit.exe", "csrss.exe", "smss.exe", "winlogon.exe", "explorer.exe"]);
+
+/** The program listening on a port: { pid, name }, or null if unknown / not safe to close. */
+export async function findPortOwner(port) {
+  if (process.platform !== "win32") return null;
+  let pid = 0;
+  for (const line of (await run("netstat", ["-ano"])).split(/\r?\n/)) {
+    const [proto, local, , state, id] = line.trim().split(/\s+/);
+    if (proto?.startsWith("TCP") && state === "LISTENING" && local?.endsWith(`:${port}`)) {
+      pid = Number(id);
+      break;
+    }
+  }
+  if (!pid || pid <= 4 || pid === process.pid) return null;
+  const name = (await run("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"])).match(/^"([^"]+)"/m)?.[1];
+  if (!name || PROTECTED.has(name.toLowerCase())) return null;
+  return { pid, name };
+}
+
+/** Native Windows Yes/No box (on top of other windows). Text goes in via env vars, never into the script. */
+export async function askYesNo(title, message) {
+  const script =
+    "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.Form; $f.TopMost = $true; " +
+    "$r = [System.Windows.Forms.MessageBox]::Show($f, $env:GT_MSG, $env:GT_TITLE, 'YesNo', 'Question'); $f.Dispose(); Write-Output $r";
+  const out = await run("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { GT_MSG: message, GT_TITLE: title });
+  return out.trim() === "Yes";
+}
+
+export const closeProcess = (pid) => run("taskkill", ["/PID", String(pid), "/F"]);
+
 // ---------- start with Windows (HKCU Run key: per-user, no admin needed) ----------
 const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const RUN_NAME = "GrindTracker";

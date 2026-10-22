@@ -2,7 +2,7 @@ import http from "node:http";
 import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, openAppWindow, autostartSupported, getAutostart, setAutostart } from "./desktop.js";
+import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, openAppWindow, findPortOwner, askYesNo, closeProcess, autostartSupported, getAutostart, setAutostart } from "./desktop.js";
 import { getSteam, getAchievementsFor, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
 import { startPresence, updatePresence, presenceState, buildActivity } from "./presence.js";
 import { computeProgress } from "./progress.js";
@@ -385,6 +385,15 @@ const json = (res, code, obj) => {
   res.end(JSON.stringify(obj));
 };
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(n))));
+const MAX_MINUTES = 100_000; // ~69 days: a typo guard, not a real limit
+
+// More than 24h in one day is allowed, but the dashboard asks first (it's usually a typo).
+function confirmOverDay(dayMinutes, body) {
+  if (dayMinutes <= 1440 || body.force) return;
+  const err = new Error(`That puts the day at ${Math.floor(dayMinutes / 60)}h ${String(Math.round(dayMinutes % 60)).padStart(2, "0")}m, more than 24 hours. Add it anyway?`);
+  err.confirm = true;
+  throw err;
+}
 
 const routes = {
   "GET /api/stats": async () => buildStats(),
@@ -412,11 +421,11 @@ const routes = {
   },
   "POST /api/study/add": async (body) => {
     const minutes = Number(body.minutes);
-    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 720) throw new Error("minutes must be 1-720");
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > MAX_MINUTES) throw new Error("Enter a number of minutes (1 or more)");
     const subject = checkSubject(body.subject ?? data.activeSubject);
     const d = day();
     const m = Math.round(minutes);
-    if (studyMin(dayKey()) + m > 1440) throw new Error(`That would put today over 24 hours (you're at ${Math.floor(studyMin(dayKey()) / 60)}h already)`);
+    confirmOverDay(studyMin(dayKey()) + m, body);
     d.manualMinutes += m;
     if (subject) {
       d.manualBySubject ??= {};
@@ -430,7 +439,7 @@ const routes = {
   // take minutes off today, newest time first (see removeMinutes)
   "POST /api/study/remove": async (body) => {
     const minutes = Math.round(Number(body.minutes));
-    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) throw new Error("minutes must be 1-1440");
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > MAX_MINUTES) throw new Error("Enter a number of minutes (1 or more)");
     const today = Math.floor(studyMin(dayKey()));
     if (today < 1) throw new Error("There's no study time today to remove");
     const removed = removeMinutes(Math.min(minutes, today));
@@ -453,7 +462,7 @@ const routes = {
       const e = (d.manualEntries ?? []).find((x) => x.at === at);
       if (!e) throw new Error("Entry not found");
       const delta = minutes - e.minutes;
-      if (delta > 0 && studyMin(dayKey(new Date(at))) + delta > 1440) throw new Error("That would put the day over 24 hours");
+      if (delta > 0) confirmOverDay(studyMin(dayKey(new Date(at))) + delta, body);
       trimEntry(d, e, -delta);
     } else if (body.kind === "legacy") {
       const legacy = d.manualMinutes - (d.manualEntries ?? []).reduce((sum, e) => sum + e.minutes, 0);
@@ -553,8 +562,8 @@ const routes = {
     win.closing = setTimeout(() => win.lastBeat < at && windowGone("closed"), 4_000);
   },
   "POST /api/settings": async (body) => {
-    if (body.goalMinutes != null) data.settings.goalMinutes = clamp(body.goalMinutes, 15, 1440);
-    if (body.playBudgetMinutes != null) data.settings.playBudgetMinutes = clamp(body.playBudgetMinutes, 15, 1440);
+    if (body.goalMinutes != null) data.settings.goalMinutes = clamp(body.goalMinutes, 1, MAX_MINUTES);
+    if (body.playBudgetMinutes != null) data.settings.playBudgetMinutes = clamp(body.playBudgetMinutes, 1, MAX_MINUTES);
     if (body.closeToBackground != null) data.settings.closeToBackground = Boolean(body.closeToBackground);
     if (body.autoUpdate != null) data.settings.autoUpdate = Boolean(body.autoUpdate);
     save();
@@ -597,7 +606,7 @@ const server = http.createServer(async (req, res) => {
       }
       return json(res, 200, out);
     } catch (e) {
-      return json(res, 400, { error: e.message });
+      return json(res, 400, { error: e.message, confirm: Boolean(e.confirm) });
     }
   }
 
@@ -683,6 +692,44 @@ const listenOn = (port) =>
     server.listen(port, "127.0.0.1");
   });
 
+// The usual port first. If another program holds it, the desktop app names that program and
+// asks whether to close it - nothing is closed without a Yes. No (or silent startup) = next port.
+async function claimBasePort() {
+  const tryBase = () =>
+    listenOn(BASE_PORT).then(
+      () => true,
+      (e) => {
+        if (e.code !== "EADDRINUSE" && e.code !== "EACCES") throw e;
+        return e.code;
+      }
+    );
+  const first = await tryBase();
+  if (first === true) return (PORT = BASE_PORT), true;
+  console.warn(`Port ${BASE_PORT} is unavailable (${first})`);
+  if (first !== "EADDRINUSE" || !isDesktop || background) return false;
+
+  const owner = await findPortOwner(BASE_PORT);
+  if (!owner) return false;
+  const yes = await askYesNo(
+    "Grind Tracker - port in use",
+    `Port ${BASE_PORT} is being used by ${owner.name} (process ${owner.pid}).\n\n` +
+      `Close ${owner.name} so Grind Tracker can use port ${BASE_PORT}?\n\n` +
+      `Choose No to leave it running. Grind Tracker will use the next free port instead.`
+  );
+  if (!yes) {
+    console.log(`Kept ${owner.name} running; using another port`);
+    return false;
+  }
+  console.log(`Closing ${owner.name} (${owner.pid}) to free port ${BASE_PORT}`);
+  await closeProcess(owner.pid);
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 300)); // give Windows a moment to release the port
+    if ((await tryBase()) === true) return (PORT = BASE_PORT), true;
+  }
+  console.warn(`Port ${BASE_PORT} still busy after closing ${owner.name}; using another port`);
+  return false;
+}
+
 async function start() {
   const running = await findRunningCopy();
   if (running) {
@@ -693,8 +740,8 @@ async function start() {
     process.exit(0);
   }
 
-  let bound = false;
-  for (let p = BASE_PORT; p <= BASE_PORT + PORT_TRIES && !bound; p++) {
+  let bound = (await claimBasePort()) || false;
+  for (let p = BASE_PORT + 1; p <= BASE_PORT + PORT_TRIES && !bound; p++) {
     try {
       await listenOn(p);
       PORT = p;

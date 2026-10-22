@@ -82,7 +82,7 @@ let goalCelebrated = null;
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const out = await res.json();
-  if (!res.ok) throw new Error(out.error || res.statusText);
+  if (!res.ok) throw Object.assign(new Error(out.error || res.statusText), { confirm: Boolean(out.confirm) });
   return out;
 }
 
@@ -904,6 +904,17 @@ function tick() {
   checkLongSession(study.activeSince ? nowServer - study.activeSince : 0);
 }
 
+// Run a request; if the server wants a yes first (e.g. a day over 24h), ask and retry with force.
+async function withConfirm(send) {
+  try {
+    return await send(false);
+  } catch (err) {
+    if (!err.confirm) throw err;
+    if (!confirm(err.message)) throw Object.assign(new Error("Not added"), { cancelled: true });
+    return send(true);
+  }
+}
+
 /* ================= today's log ================= */
 const clock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
@@ -980,7 +991,7 @@ function editDuration(li, dur, x) {
     input.replaceWith(dur); // close the editor first so the log can re-render with the new value
     try {
       $("log").dataset.sig = "";
-      apply(await api("/api/study/edit", { kind: x.kind, at: x.at, minutes }));
+      apply(await withConfirm((force) => api("/api/study/edit", { kind: x.kind, at: x.at, minutes, force })));
       toast(`Changed to ${hm(minutes)}`);
     } catch (err) {
       toast(err.message, true);
@@ -1067,8 +1078,7 @@ $("addForm").addEventListener("submit", async (e) => {
       apply(out);
       toast(out.result.removed < minutes ? `Removed ${hm(out.result.removed)} (that's all of today)` : `Removed ${hm(out.result.removed)} from today`);
     } else {
-      if (minutes > 720) throw new Error("Add up to 720 minutes at a time");
-      apply(await api("/api/study/add", { minutes }));
+      apply(await withConfirm((force) => api("/api/study/add", { minutes, force })));
       toast(`Added ${hm(minutes)}`);
     }
     input.value = "";

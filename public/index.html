@@ -89,7 +89,7 @@
         </div>
         <button class="cta" id="studyBtn"><span id="studyBtnText">Start studying</span><kbd>Space</kbd></button>
         <form class="add" id="addForm">
-          <input type="number" id="addMin" min="1" max="1440" placeholder="Fix today's time: minutes" required aria-label="Minutes to add or remove">
+          <input type="number" id="addMin" min="1" placeholder="Fix today's time: minutes" required aria-label="Minutes to add or remove">
           <button type="submit" value="add" title="Add minutes you forgot to track">+ Add</button>
           <button type="submit" value="remove" class="rm-btn" title="Take minutes off today (newest time first)">− Remove</button>
         </form>
@@ -276,8 +276,8 @@
   <dialog id="settings">
     <form method="dialog" id="settingsForm">
       <h2><span>⚙</span>Settings</h2>
-      <label>Daily study goal <span><input type="number" id="goalIn" min="15" max="1440" step="15"> min</span></label>
-      <label>Game time budget <span><input type="number" id="budgetIn" min="15" max="1440" step="15"> min</span></label>
+      <label>Daily study goal <span><input type="number" id="goalIn" min="1" step="1"> min</span></label>
+      <label>Game time budget <span><input type="number" id="budgetIn" min="1" step="1"> min</span></label>
       <button type="button" class="link-btn" id="openSetup">Edit Discord &amp; Steam connections →</button>
       <a class="link-btn" href="/api/export.csv" download>Download my study history (CSV) ↓</a>
       <div class="desktop-only" id="desktopOpts" hidden>

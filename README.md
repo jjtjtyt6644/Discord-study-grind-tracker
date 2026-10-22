@@ -124,7 +124,7 @@ Paste `%APPDATA%\GrindTracker` into File Explorer's address bar to open the fold
 
 **Achievements say "Your achievements are hidden"**: set **Game details** to **Public** in [Steam privacy settings](https://steamcommunity.com/my/edit/settings) and wait a few minutes. Your play time works either way, because Steam always shows your library to your own key.
 
-**Today's total looks wrong**: use **− Remove**, or edit or delete entries in **Today's log**. Time added before the log existed shows as **"+ added earlier"**. A single day can't go past 24 hours.
+**Today's total looks wrong**: use **− Remove**, or edit or delete entries in **Today's log**. Time added before the log existed shows as **"+ added earlier"**. There are no limits on how much you add; if a day would go past 24 hours, it asks you to confirm first (usually that means a typo).
 
 **"Steam rejected the API key"**: copy it again from [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey). It's exactly 32 characters.
 
@@ -134,7 +134,7 @@ Paste `%APPDATA%\GrindTracker` into File Explorer's address bar to open the fold
 
 **Double-clicked the exe and nothing new started**: it's already running, so it just opens its window again.
 
-**Port 3000 is taken by another program**: nothing to do. Grind Tracker automatically tries 3001, 3002, … up to 3020, and opening the exe again still finds it. To pick the starting port yourself, add `PORT=3100` to your `.env`.
+**Port 3000 is taken by another program**: the app tells you which program it is and asks whether to close it. Choose **No** and it uses the next free port (3001, 3002, … up to 3020) instead; opening the exe again still finds it. To pick the starting port yourself, add `PORT=3100` to your `.env`.
 
 ---
 
