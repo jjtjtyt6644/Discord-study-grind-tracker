@@ -6,12 +6,16 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "logo": "node scripts/make-logo.mjs"
+    "logo": "node scripts/make-logo.mjs",
+    "build:exe": "node scripts/build-exe.mjs"
   },
   "dependencies": {
     "@xhayper/discord-rpc": "^1.2.1"
   },
   "devDependencies": {
-    "@resvg/resvg-js": "^2.6.2"
+    "@resvg/resvg-js": "^2.6.2",
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6",
+    "rcedit": "^5.0.2"
   }
 }

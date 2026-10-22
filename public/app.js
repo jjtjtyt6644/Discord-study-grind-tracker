@@ -90,7 +90,7 @@ async function refresh() {
   try {
     apply(await api("/api/stats"));
   } catch {
-    showNotice("Can't reach the Grind Tracker server. Is `npm start` still running?");
+    if ($("quitScreen").hidden) showNotice(stats?.app?.desktop ? "Can't reach Grind Tracker. Is GrindTracker.exe still running?" : "Can't reach the Grind Tracker server. Is `npm start` still running?");
   }
 }
 
@@ -1076,7 +1076,31 @@ const dialog = $("settings");
 $("settingsBtn").addEventListener("click", () => {
   $("goalIn").value = stats?.study.goalMinutes ?? 240;
   $("budgetIn").value = stats?.played.budgetMinutes ?? 120;
+  const appInfo = stats?.app ?? {};
+  $("desktopOpts").hidden = !appInfo.autostartSupported;
+  $("quitBtn").hidden = !appInfo.desktop;
+  $("autostartIn").checked = Boolean(appInfo.autostart);
+  $("appMeta").textContent = `Grind Tracker v${appInfo.version ?? "?"}${appInfo.dataDir ? ` · your data: ${appInfo.dataDir}` : ""}`;
   dialog.showModal();
+});
+
+// applies right away (not on Save) - it's a system setting, not a goal
+$("autostartIn").addEventListener("change", async (e) => {
+  try {
+    apply(await api("/api/autostart", { enabled: e.target.checked }));
+    e.target.checked = stats.app.autostart;
+    toast(stats.app.autostart ? "Grind Tracker will start with Windows" : "Won't start with Windows anymore");
+  } catch (err) {
+    e.target.checked = !e.target.checked;
+    toast(err.message, true);
+  }
+});
+
+$("quitBtn").addEventListener("click", async () => {
+  dialog.close();
+  await api("/api/quit", {}).catch(() => {});
+  $("quitScreen").hidden = false;
+  document.title = "Grind Tracker (closed)";
 });
 dialog.addEventListener("close", async () => {
   if (dialog.returnValue !== "save") return;

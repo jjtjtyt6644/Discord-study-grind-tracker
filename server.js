@@ -2,20 +2,22 @@ import http from "node:http";
 import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, openBrowser, autostartSupported, getAutostart, setAutostart } from "./desktop.js";
 import { getSteam, getAchievementsFor, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
 import { startPresence, updatePresence, presenceState, buildActivity } from "./presence.js";
 import { computeProgress } from "./progress.js";
 
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const ENV_FILE = process.env.ENV_FILE || path.join(ROOT, ".env");
+const ENV_FILE = process.env.ENV_FILE || path.join(APP_DIR, ".env");
 try {
   process.loadEnvFile(ENV_FILE);
 } catch {}
 
 const PORT = Number(process.env.PORT) || 3000;
-const DATA_FILE = process.env.DATA_FILE || path.join(ROOT, "data.json");
+const DATA_FILE = process.env.DATA_FILE || path.join(APP_DIR, "data.json");
 const PUBLIC = path.join(ROOT, "public");
+// cached: asking the registry on every refresh would be wasteful (no top-level await: the exe bundle is CommonJS)
+let autostart = false;
+getAutostart().then((v) => (autostart = v));
 const TYPES = {
   ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml",
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
@@ -227,7 +229,7 @@ async function writeEnv(updates) {
   try {
     text = await readFile(ENV_FILE, "utf8");
   } catch {
-    text = await readFile(path.join(ROOT, ".env.example"), "utf8").catch(() => "");
+    text = readAsset(".env.example")?.toString("utf8") ?? (await readFile(path.join(ROOT, ".env.example"), "utf8").catch(() => ""));
   }
   const lines = text.split(/\r?\n/);
   for (const [k, v] of Object.entries(updates)) {
@@ -329,6 +331,7 @@ async function buildStats() {
     steam: steam && { ...steam, playtimes: undefined },
     steamError,
     config: configStatus(),
+    app: { version: VERSION, desktop: isDesktop, autostartSupported, autostart, dataDir: isDesktop ? APP_DIR : null },
   };
   const activity = buildActivity(stats, process.env.LARGE_IMAGE);
   stats.discord = { ...presenceState(), activity };
@@ -492,6 +495,13 @@ const routes = {
     save();
   },
   "POST /api/config": saveConfig,
+  "POST /api/autostart": async (body) => {
+    autostart = await setAutostart(Boolean(body.enabled));
+  },
+  // the exe has no window to close, so the dashboard offers Quit
+  "POST /api/quit": async () => {
+    setTimeout(flushAndExit, 300);
+  },
   "POST /api/settings": async (body) => {
     if (body.goalMinutes != null) data.settings.goalMinutes = clamp(body.goalMinutes, 15, 1440);
     if (body.playBudgetMinutes != null) data.settings.playBudgetMinutes = clamp(body.playBudgetMinutes, 15, 1440);
@@ -539,10 +549,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method !== "GET") return json(res, 405, { error: "method not allowed" });
-  const file = path.join(PUBLIC, url.pathname === "/" ? "index.html" : decodeURIComponent(url.pathname));
+  const rel = url.pathname === "/" ? "index.html" : decodeURIComponent(url.pathname).replace(/^\/+/, "");
+  const file = path.join(PUBLIC, rel);
   if (!file.startsWith(PUBLIC + path.sep)) return json(res, 403, { error: "forbidden" });
   try {
-    const content = await readFile(file);
+    const content = await loadStatic(rel, file);
     // no-cache = browser revalidates, so dashboard updates show up without a hard refresh
     res.writeHead(200, { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream", "cache-control": "no-cache" });
     res.end(content);
@@ -551,17 +562,42 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`✓ Grind Tracker running at http://localhost:${PORT}`);
-  if (!process.env.STEAM_API_KEY || !process.env.STEAM_ID64) console.log("  Steam: demo mode (set STEAM_API_KEY + STEAM_ID64 in .env)");
-  if (!process.env.DISCORD_CLIENT_ID) console.log("  Discord: off (set DISCORD_CLIENT_ID in .env)");
-});
+// custom art in %APPDATA%\GrindTracker\img wins, then the files baked into the exe, then the source folder
+async function loadStatic(rel, file) {
+  const posix = rel.split(path.sep).join("/");
+  if (posix.startsWith("img/") && !posix.slice(4).includes("/") && hasCustomArt(posix.slice(4))) return readFile(path.join(ART_DIR, posix.slice(4)));
+  return readAsset(`public/${posix}`) ?? (await readFile(file));
+}
 
-startPresence(process.env.DISCORD_CLIENT_ID);
-setInterval(pushPresence, 15_000);
-pushPresence();
-
-process.on("SIGINT", () => {
+function flushAndExit() {
   writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
   process.exit(0);
+}
+
+const URL_HOME = `http://localhost:${PORT}`;
+const background = process.argv.includes("--background"); // started by Windows at login: stay quiet
+
+server.on("error", async (e) => {
+  if (e.code !== "EADDRINUSE") throw e;
+  // already running (e.g. double-clicked twice): just bring up the dashboard
+  const alive = await fetch(`${URL_HOME}/api/stats`, { signal: AbortSignal.timeout(3000) }).then((r) => r.ok).catch(() => false);
+  if (alive) {
+    if (!background) openBrowser(URL_HOME);
+    process.exit(0);
+  }
+  console.error(`Port ${PORT} is used by another program. Set a different PORT in ${ENV_FILE}`);
+  process.exit(1);
 });
+
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`✓ Grind Tracker ${VERSION} running at ${URL_HOME}${isDesktop ? ` (data: ${APP_DIR})` : ""}`);
+  if (!process.env.STEAM_API_KEY || !process.env.STEAM_ID64) console.log("  Steam: demo mode (connect it in the dashboard)");
+  if (!process.env.DISCORD_CLIENT_ID) console.log("  Discord: off (connect it in the dashboard)");
+  if (isDesktop && !background) openBrowser(URL_HOME);
+
+  startPresence(process.env.DISCORD_CLIENT_ID);
+  setInterval(pushPresence, 15_000);
+  pushPresence();
+});
+
+process.on("SIGINT", flushAndExit);

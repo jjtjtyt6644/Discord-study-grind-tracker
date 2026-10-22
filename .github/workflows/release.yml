@@ -1,0 +1,52 @@
+# Builds GrindTracker.exe and attaches it to a GitHub Release.
+# Trigger: push a version tag, e.g.  git tag v1.0.1 && git push origin v1.0.1
+# (keep the tag in sync with "version" in package.json - it's baked into the exe)
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build:exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GrindTracker
+          path: dist/GrindTracker.exe
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/GrindTracker.exe
+          generate_release_notes: true
+          body: |
+            ## Download
+
+            **[GrindTracker.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/GrindTracker.exe)**: Windows 10/11, no install, no Node.js needed.
+
+            1. Download `GrindTracker.exe` and put it somewhere permanent (e.g. a `Grind Tracker` folder in Documents).
+            2. Double-click it. The dashboard opens in your browser.
+            3. Follow the **Connect your accounts** steps (Discord Application ID, Steam key, Steam profile).
+            4. Optional: ⚙ Settings → **Start with Windows**.
+
+            > **"Windows protected your PC"?** The exe isn't code-signed (that costs money), so SmartScreen warns about new downloads. Click **More info → Run anyway**. The full source is in this repo, and every release is built by GitHub Actions from it.
+
+            Your data lives in `%APPDATA%\GrindTracker` (study history, settings, log). Updating = download the new exe and replace the old one; your data stays.

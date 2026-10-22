@@ -688,6 +688,25 @@ body.no-art .about-art { display: none; }
   .toc { grid-template-columns: 1fr; }
 }
 
+/* ============ settings: desktop options ============ */
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 14px 0 4px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); cursor: pointer; }
+.switch-row span { display: grid; gap: 2px; font-weight: 500; }
+.switch-row small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.switch-row input {
+  appearance: none; flex: none; width: 40px; height: 22px; border-radius: 99px; cursor: pointer; position: relative;
+  background: var(--surface-3); border: 1px solid var(--line-2); transition: background .2s;
+}
+.switch-row input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .2s, background .2s; }
+.switch-row input:checked { background: var(--accent); border-color: var(--accent); }
+.switch-row input:checked::after { transform: translateX(18px); background: var(--ink); }
+.app-meta { word-break: break-all; }
+.quit-btn { margin-right: auto; }
+.quit-btn:hover { border-color: var(--warn); color: var(--warn); }
+.quit-screen { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(5, 6, 12, .92); backdrop-filter: blur(8px); text-align: center; padding: 24px; }
+.quit-screen[hidden] { display: none; }
+.quit-screen b { font: 700 32px var(--display); }
+.quit-screen p { color: var(--muted); max-width: 380px; line-height: 1.6; }
+
 /* ============ level up overlay ============ */
 .levelup {
   position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; pointer-events: none; opacity: 0;

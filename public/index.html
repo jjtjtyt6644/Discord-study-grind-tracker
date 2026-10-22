@@ -216,7 +216,7 @@
       <header class="setup-head">
         <div class="eyebrow"><span class="mode-dot"></span>SETUP</div>
         <h3>Connect your accounts</h3>
-        <p>Everything stays on this computer. Your keys are saved to the <code>.env</code> file next to the app and are never sent anywhere except Steam and your own Discord app.</p>
+        <p>Everything stays on this computer. Your keys are saved in a <code>.env</code> file in your Grind Tracker data folder, and only ever go to Steam and your own Discord app.</p>
       </header>
 
       <fieldset class="step">
@@ -279,8 +279,16 @@
       <label>Game time budget <span><input type="number" id="budgetIn" min="15" max="1440" step="15"> min</span></label>
       <button type="button" class="link-btn" id="openSetup">Edit Discord &amp; Steam connections →</button>
       <a class="link-btn" href="/api/export.csv" download>Download my study history (CSV) ↓</a>
+      <div class="desktop-only" id="desktopOpts" hidden>
+        <label class="switch-row">
+          <span>Start with Windows<small>Opens quietly in the background when you log in</small></span>
+          <input type="checkbox" id="autostartIn" role="switch">
+        </label>
+      </div>
       <p class="muted small">Tip: press <kbd>?</kbd> on the dashboard to see keyboard shortcuts.</p>
+      <p class="muted small app-meta" id="appMeta"></p>
       <div class="dialog-actions">
+        <button type="button" class="ghost quit-btn" id="quitBtn" hidden>Quit app</button>
         <button value="cancel" formnovalidate class="ghost">Cancel</button>
         <button value="save" class="solid">Save</button>
       </div>
@@ -314,6 +322,10 @@
       </div>
     </form>
   </dialog>
+
+  <div class="quit-screen" id="quitScreen" hidden>
+    <div><b>Grind Tracker is closed</b><p>Your progress is saved. Open GrindTracker.exe again any time. You can close this tab.</p></div>
+  </div>
 
   <div class="bpop" id="bpop" role="dialog" aria-label="Badge details" hidden></div>
   <div class="toast" id="toast" role="status"></div>
