@@ -1,0 +1,17 @@
+{
+  "name": "grind-tracker",
+  "version": "1.0.0",
+  "description": "Study + gaming stats dashboard that shows on your Discord profile via Rich Presence",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "logo": "node scripts/make-logo.mjs"
+  },
+  "dependencies": {
+    "@xhayper/discord-rpc": "^1.2.1"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2"
+  }
+}
