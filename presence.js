@@ -87,7 +87,7 @@ export function buildActivity(stats, largeImage, privacy = {}) {
   const p = { ...PRIVACY_DEFAULTS, ...privacy };
   if (!p.show) return null;
   const { mode, study, played, steam, focus } = stats;
-  const game = steam?.profile.currentGame;
+  const game = stats.game; // Steam or detected on the PC
   const goalPct = study.todayMs / 60000 / study.goalMinutes;
   const subject = p.subject && study.subject ? ` · ${study.subject.toLowerCase()}` : "";
 
@@ -116,7 +116,7 @@ export function buildActivity(stats, largeImage, privacy = {}) {
   }
 
   if (p.image) {
-    const big = mode === "gaming" && p.game ? game.header : largeImage || steam?.profile.avatar;
+    const big = mode === "gaming" && p.game && game.icon ? game.icon : largeImage || steam?.profile.avatar;
     if (big) {
       activity.largeImageKey = big;
       const hover = [
@@ -125,7 +125,7 @@ export function buildActivity(stats, largeImage, privacy = {}) {
       ].filter(Boolean);
       activity.largeImageText = hover.join(" · ") || "grind tracker";
     }
-    if (mode === "gaming" && p.game && steam.profile.avatar) {
+    if (mode === "gaming" && p.game && game.source === "steam" && steam?.profile.avatar) {
       activity.smallImageKey = steam.profile.avatar;
       activity.smallImageText = steam.profile.level ? `Steam level ${steam.profile.level}` : steam.profile.name;
     }

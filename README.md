@@ -35,26 +35,29 @@ You also need the **Discord desktop app** running. Rich Presence doesn't work in
 - **Fix your time**: **+ Add** time you forgot to track, **− Remove** time you added by mistake, or click any entry in **Today's log** to edit or delete it.
 - **"Still studying?"**: after 3 hours nonstop, it checks that you didn't forget the timer.
 - **Focus timer (Pomodoro)**: switch the Session card to **Focus** for timed rounds (25/5 by default, with a long break every 4). It has a countdown ring, a chime between phases, and keeps running with the window closed. Rounds count as study time. Change the lengths right on the card with the +/− steppers, or pick Classic 25/5, Deep 50/10, Flow 90/15 or Sprint 15/3.
-- **Played today**: pulled from Steam automatically, including the game you're in right now.
+- **Any game, not just Steam**: like Discord, Grind Tracker spots games you open from any launcher (Epic, Riot, Battle.net, emulators…) using Discord's own list of 10,000+ games. Not detected? Add any program in ⚙ Settings → **Games** and give it a name, or press **Not a game** on one that shouldn't count.
+- **Played today**: Steam time plus every detected game, without counting the same game twice.
+- **Studying or Working**: flip the toggle at the top and the whole app (dashboard, quests, badges, notifications and your Discord card) says "worked" instead of "studied".
+- **Session notes**: add a short note to any entry in Today's log ("Chapter 5 problems"). Notes go into the CSV export too.
 
 **Progress**
 - **Daily quests**: 3 new missions every day (e.g. "Finish 2 sessions of 45m+", "Complete 2 focus rounds", "Start before 10am"). +50 XP each, +100 for clearing all 3, plus a quest streak.
 - **XP, levels & ranks**: 2 XP per minute studied, +100 XP every day you hit your goal, and quest XP on top. **50 levels**: 10 ranks with 5 divisions each (Rookie I → Apprentice → Scholar → Strategist → Sage → Mastermind → Virtuoso → Grandmaster → Mythic → Legend V), with a full-screen LEVEL UP moment. Level 2 takes about 25 minutes; Legend V is the long game.
 - **18 badges** across streaks, focus, habits, goals, balance, subjects and total time. Click a badge to see what it's for and how close you are.
 - **Year heatmap**: a GitHub-style grid of every day you studied, with totals and your best day.
-- **Daily goal + game budget**: segmented progress bars, a 7-day chart, a streak counter, and confetti when you hit your goal.
+- **Daily goal + game budget**: segmented progress bars, a 7-day chart, a streak counter, and confetti when you hit your goal. Optionally set a **different goal for weekends**.
 
 **Steam**
 - Profile, level, current or last game, recently played, games owned and lifetime hours.
 - **Achievements** for any recently played game: completion, your **rarest unlock** (the % of all players who have it), latest unlocks, and the **easiest ones to get next**.
 
 **Discord**
-- A **Rich Presence card** that updates every 15s: study and play time, level, current subject or game, a goal bar, and a focus countdown.
+- A **Rich Presence card** that updates every 15s: study and play time, level, current subject or game (with the game's own icon, even for non-Steam games), a goal bar, and a focus countdown.
 - **Privacy controls**: choose exactly what the card shows (study time, play time, level, subject, game, goal bar, timer, picture, Steam button), with a live preview. Or hide it completely. Everything is on by default.
 
 **App**
 - **Auto-updates**: the app checks GitHub for new versions, downloads and verifies them in the background, and asks you to restart. You can turn this off in Settings.
-- **Notifications**: Windows notifications for hitting your goal, going over your game budget, focus rounds and breaks, finished quests, a break reminder after long sessions, and an optional "no study yet today" nudge. Each one can be switched off.
+- **Notifications**: Windows notifications for hitting your goal, going over your game budget, focus rounds and breaks, finished quests, a break reminder after long sessions, an optional "no study yet today" nudge, and an optional **daily recap** at a time you pick. Each one can be switched off.
 - **Themes & your own art**: Mode colors (default), Sakura, Ocean, Ember, Matcha, Mono, or your own two colors. Upload your own character art and logo straight from Settings.
 - **Desktop app**: one `.exe` that opens in its own window. Closing the window quits it and frees the port, unless you turn on **Keep running when I close the window** so Discord keeps showing your stats. Also **Start with Windows** and **Quit** in Settings.
 - **Built-in Guide and About pages**, keyboard shortcuts (<kbd>?</kbd>), and **CSV export** of your full history.
@@ -98,15 +101,18 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Forgot to start the timer | Type minutes under the timer → **+ Add** |
 | Added too much time | Type minutes → **− Remove** (newest time first), or click a duration in **Today's log** |
 | Delete an entry | **Today's log** → **×** → **Delete?** |
-| Change goal / game budget | ⚙ **Settings** (or <kbd>G</kbd>) |
+| Change goal / game budget | ⚙ **Settings** (or <kbd>G</kbd>) → **Goals** (weekend goal is there too) |
+| Studying or working | The **Studying / Working** toggle at the top of the dashboard |
+| Add a note to a session | **Today's log** → **+ note** (✎ to change it) |
+| A game isn't detected | ⚙ **Settings → Games** → pick it from *Choose a running program*, name it, **Add** |
 | Use the focus timer | Switch the Session card to **Focus**, then **Start focus** (or <kbd>Space</kbd>) |
 | Choose what Discord shows | ⚙ **Settings → Privacy** |
-| Settings | ⚙ (top right) or <kbd>G</kbd>: **Goals**, **Focus timer**, **Privacy**, **Notifications**, **Appearance**, **App**, **Updates**, **Connections**, **Data & backups**, **Shortcuts**. Everything saves instantly |
+| Settings | ⚙ (top right) or <kbd>G</kbd>: **Goals**, **Focus timer**, **Privacy**, **Notifications**, **Appearance**, **Games**, **App**, **Updates**, **Connections**, **Data & backups**, **Shortcuts**. Everything saves instantly |
 | Update | Automatic: click **Restart now** on the banner when one is ready. Or ⚙ **Settings → Check for updates** |
 | Back up your history | **Export CSV** in Today's log, or ⚙ → *Download my study history* |
 | Learn everything | **Guide** at the top of the dashboard, or <kbd>?</kbd> for shortcuts |
 
-**Modes** switch automatically: **Locked in** (timer running), **In game** (Steam says you're playing), and **On break** (neither). Your Discord card follows along.
+**Modes** switch automatically: **Locked in** (timer running), **In game** (a Steam game or any detected game is running), and **On break** (neither). Your Discord card follows along.
 
 ### Your data
 
@@ -200,7 +206,9 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
 | `progress.js` | XP, levels, ranks and badges, all calculated from your study history |
 | `focus.js` | The focus (Pomodoro) timer: phases, rounds, auto-next |
 | `quests.js` | Daily quests: picking 3 per day, progress, quest XP and streak |
-| `notify.js` | Windows notifications and reminders (goal, budget, break, nudge) |
+| `notify.js` | Windows notifications and reminders (goal, budget, break, nudge, daily recap) |
+| `games.js` | Game detection: Discord's public list of games (cached weekly) matched against running programs, plus your own programs |
+| `vocab.js` | Studying/Working wording for the Discord card, quests, badges and notifications |
 | `public/` | Dashboard (`index.html`, `app.js`), Guide/About (`guide.html`, `about.html`, `pages.js`), background (`bg.js`), styles, and art |
 | `scripts/` | `make-logo.mjs` and `build-exe.mjs` |
 

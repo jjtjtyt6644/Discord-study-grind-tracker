@@ -35,6 +35,7 @@
   document.body.dataset.mode = stats.mode;
   BG.setMode(stats.mode);
   window.GT_applyTheme(stats.prefs?.theme);
+  window.GT_vocab(stats.prefs?.activity);
 
   const p = stats.progress;
   if (!p || !$("rankTable")) return;
@@ -75,4 +76,5 @@
       return g;
     })
   );
+  window.GT_vocab(stats.prefs?.activity);
 })();

@@ -118,7 +118,7 @@ function render() {
   const { mode, study, played, steam, steamError, discord } = stats;
   document.body.dataset.mode = mode;
   BG.setMode(mode);
-  $("modeLabel").textContent = mode === "study" ? "LOCKED IN" : mode === "gaming" ? "IN GAME" : "ON BREAK";
+  $("modeLabel").textContent = mode === "study" ? "LOCKED IN" : mode === "gaming" ? (stats.game ? `IN ${stats.game.name.toUpperCase()}`.slice(0, 32) : "IN GAME") : "ON BREAK";
   $("plateMode").textContent = PLATE[mode];
   if (mode !== lastMode) {
     say(mode);
@@ -156,12 +156,14 @@ function render() {
   renderHeatmap();
   renderMarquee();
   renderUpdate();
+  renderActivity();
   renderFocus();
   renderQuests();
   applyTheme(stats.prefs?.theme);
   showInbox();
   if (settingsDlg.open) renderSettings();
   maybeOpenSetup();
+  window.GT_vocab(stats.prefs?.activity); // studied → worked etc. everywhere, if Working is on
 }
 
 /* ================= updates ================= */
@@ -922,9 +924,9 @@ const clock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minut
 
 function renderLog() {
   const list = $("log");
-  if (list.querySelector(".ledit")) return; // don't wipe a duration someone is editing
+  if (list.querySelector(".ledit, .lnote-in")) return; // don't wipe something someone is editing
   const log = stats.study.log;
-  const sig = JSON.stringify(log.map((x) => [x.kind, x.at, x.kind === "live" ? 0 : x.minutes, x.subject]));
+  const sig = JSON.stringify(log.map((x) => [x.kind, x.at, x.kind === "live" ? 0 : x.minutes, x.subject, x.note]));
   if (list.dataset.sig === sig) return;
   list.dataset.sig = sig;
   if (!log.length) return list.replaceChildren(el("li", "empty", "Nothing yet today. Hit Start studying (or press Space) to begin."));
@@ -941,6 +943,14 @@ function renderLog() {
         dur.addEventListener("click", () => editDuration(li, dur, x));
       }
       li.append(el("span", "lwhen", when), tag, dur);
+      if (x.kind === "session" || x.kind === "added") {
+        const pen = el("button", "lnote-btn", x.note ? "✎" : "+ note");
+        pen.type = "button";
+        pen.title = x.note ? "Edit note" : "Add a note (what did you work on?)";
+        pen.addEventListener("click", () => editNote(li, x));
+        li.append(pen);
+      }
+      if (x.note) li.append(el("span", "lnote", x.note));
       if (x.kind !== "live") {
         // two-step delete: first click arms it, second click within 3s deletes
         const del = el("button", "ldel", "×");
@@ -968,6 +978,38 @@ function renderLog() {
       return li;
     })
   );
+}
+
+// a short note under a log entry; Enter saves, Esc cancels, empty removes it
+function editNote(li, x) {
+  if (li.querySelector(".lnote-in")) return;
+  const input = el("input", "lnote-in");
+  input.maxLength = 140;
+  input.placeholder = "What did you work on?";
+  input.value = x.note ?? "";
+  li.querySelector(".lnote")?.remove();
+  li.append(input);
+  input.focus();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    input.remove();
+    $("log").dataset.sig = "";
+    if (save && input.value.trim() !== (x.note ?? "")) {
+      try {
+        apply(await api("/api/study/note", { kind: x.kind, at: x.at, note: input.value }));
+        toast(input.value.trim() ? "Note saved" : "Note removed");
+      } catch (err) {
+        toast(err.message, true);
+      }
+    } else renderLog();
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") finish(true);
+    if (e.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", () => finish(true));
 }
 
 // swap the duration for a small number field; Enter saves, Esc cancels
@@ -1111,7 +1153,7 @@ const store = {
 
 function toast(msg, isError = false) {
   const t = $("toast");
-  t.textContent = msg;
+  t.textContent = window.GT_words(msg, stats?.prefs?.activity);
   t.classList.toggle("err", isError);
   t.classList.add("show");
   clearTimeout(toast.timer);
@@ -1343,6 +1385,24 @@ function renderQuests() {
   $("qFoot").classList.toggle("won", q.allDone);
 }
 
+/* ================= studying / working ================= */
+function renderActivity() {
+  const a = stats.prefs?.activity ?? "study";
+  document.querySelectorAll("#actToggle button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.a === a)));
+  document.body.dataset.activity = a;
+}
+document.querySelectorAll("#actToggle button").forEach((b) =>
+  b.addEventListener("click", async () => {
+    if (stats?.prefs?.activity === b.dataset.a) return;
+    try {
+      apply(await api("/api/settings", { activity: b.dataset.a }));
+      toast(b.dataset.a === "work" ? "Tracking work: everything now says worked / working" : "Tracking study again");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  })
+);
+
 /* ================= theme ================= */
 function applyTheme(theme) {
   window.GT_applyTheme?.(theme);
@@ -1361,7 +1421,7 @@ function showInbox() {
 
 /* ================= settings ================= */
 const settingsDlg = $("settings");
-const PANE_TITLES = { goals: "Goals", focus: "Focus timer", privacy: "Privacy", notify: "Notifications", appearance: "Appearance", app: "App", updates: "Updates", connections: "Connections", data: "Data & backups", shortcuts: "Keyboard shortcuts" };
+const PANE_TITLES = { games: "Games", goals: "Goals", focus: "Focus timer", privacy: "Privacy", notify: "Notifications", appearance: "Appearance", app: "App", updates: "Updates", connections: "Connections", data: "Data & backups", shortcuts: "Keyboard shortcuts" };
 
 function showPane(name) {
   document.querySelectorAll(".set-tab").forEach((t) => {
@@ -1463,6 +1523,24 @@ function renderSettings(full = false) {
   $("fAutoIn").checked = fs.autoNext !== false;
   document.querySelectorAll("#focusPresets button").forEach((b) => b.classList.toggle("on", b.dataset.p === [fs.focus, fs.short, fs.long, fs.every].join(",")));
 
+  // weekend goal
+  const wk = stats.prefs?.weekendGoal;
+  $("wkOn").checked = Boolean(wk);
+  $("wkRow").hidden = !wk;
+  if (wk && document.activeElement !== $("wkIn")) $("wkIn").value = wk;
+  $("wkVal").textContent = wk ? `${hm(wk)} on Saturdays and Sundays` : "";
+
+  // games
+  const gs = stats.games ?? {};
+  $("gDetect").checked = gs.detect !== false;
+  $("gDbInfo").textContent = gs.games
+    ? `Watching for ${gs.games.toLocaleString()} games from Discord's list (updated ${ago(gs.updatedAt)}), plus your own programs.`
+    : "Downloading Discord's game list… (needs internet once; it's cached after that)";
+  renderGameNow(gs);
+  renderProgList("gCustom", gs.custom ?? [], (c) => [c.name, c.exe], (c) => saveSetting({ games: { removeCustom: c.exe } }), "No programs added yet.");
+  renderProgList("gIgnore", gs.ignore ?? [], (e) => [e, ""], (e) => saveSetting({ games: { removeIgnore: e } }), "");
+  $("gIgnoreCard").hidden = !(gs.ignore ?? []).length;
+
   // privacy
   const pv = stats.prefs?.privacy ?? {};
   for (const k of Object.keys(pv)) if ($(`pv-${k}`)) $(`pv-${k}`).checked = pv[k] !== false;
@@ -1475,6 +1553,9 @@ function renderSettings(full = false) {
   $("ntList").classList.toggle("off", nt.on === false);
   $("ntBreak").value = String(nt.breakAfter ?? 90);
   if (document.activeElement !== $("ntNudgeAt")) $("ntNudgeAt").value = nt.nudgeAt ?? "19:00";
+  $("nt-recap").checked = nt.recap === true;
+  if (document.activeElement !== $("ntRecapAt")) $("ntRecapAt").value = nt.recapAt ?? "21:30";
+  $("ntRecapAt").disabled = nt.recap !== true;
   $("ntNudgeAt").disabled = nt.nudge !== true; // the time only matters when the nudge is on
   $("ntWhere").textContent = a.desktop ? "Sends a Windows notification right now." : "Shows a test notification inside the dashboard.";
 
@@ -1599,7 +1680,81 @@ function renderPrivacyPreview() {
 }
 
 // ---- notifications
-for (const k of ["on", "goal", "budget", "focus", "quests", "nudge"]) $(`nt-${k}`).addEventListener("change", (e) => saveSetting({ notify: { [k]: e.target.checked } }));
+for (const k of ["on", "goal", "budget", "focus", "quests", "nudge", "recap"]) $(`nt-${k}`).addEventListener("change", (e) => saveSetting({ notify: { [k]: e.target.checked } }));
+$("ntRecapAt").addEventListener("change", (e) => e.target.value && saveSetting({ notify: { recapAt: e.target.value } }));
+
+// ---- weekend goal
+$("wkOn").addEventListener("change", (e) => saveSetting({ weekendGoal: e.target.checked ? Math.round(stats.study.goalMinutes / 2) || 60 : null }));
+$("wkIn").addEventListener("change", (e) => Number(e.target.value) >= 1 && saveSetting({ weekendGoal: Number(e.target.value) }));
+
+// ---- games
+$("gDetect").addEventListener("change", (e) => saveSetting({ games: { detect: e.target.checked } }));
+async function loadPrograms() {
+  try {
+    const { list } = await api("/api/processes");
+    const pick = $("gPick");
+    const keep = pick.value;
+    pick.replaceChildren(el("option", null, list.length ? "Choose a running program…" : "No programs found"), ...list.map((exe) => Object.assign(el("option", null, exe), { value: exe })));
+    pick.firstChild.value = "";
+    if (list.includes(keep)) pick.value = keep;
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+$("gRefresh").addEventListener("click", loadPrograms);
+$("gPick").addEventListener("focus", () => $("gPick").options.length <= 1 && loadPrograms());
+$("gPick").addEventListener("change", (e) => {
+  if (!$("gName").value && e.target.value) $("gName").value = e.target.value.replace(/\.exe$/i, "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+});
+$("gAdd").addEventListener("click", async () => {
+  const exe = $("gPick").value;
+  if (!exe) return toast("Choose a running program first", true);
+  if (await saveSetting({ games: { addCustom: { exe, name: $("gName").value } } }, `Added: ${$("gName").value || exe}`)) {
+    $("gName").value = "";
+    $("gPick").value = "";
+  }
+});
+
+function renderGameNow(gs) {
+  const box = $("gNow");
+  const d = gs.detected;
+  const sig = JSON.stringify([d?.name, d?.exe, gs.detect]);
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  if (!d) return box.replaceChildren(el("b", null, "No game running"), el("small", null, "Start one and it shows up here within 15 seconds."));
+  const ic = el("div", "ng-ic");
+  if (d.icon) ic.append(Object.assign(el("img"), { src: d.icon, alt: "" }));
+  else ic.textContent = d.name.slice(0, 1);
+  const txt = el("div", "ng-txt");
+  txt.append(el("small", null, d.source === "custom" ? "Playing now · your program" : "Playing now · detected"), el("b", null, d.name), el("small", "mono", d.exe));
+  const ignore = el("button", "btn-ghost", "Not a game");
+  ignore.type = "button";
+  ignore.title = `Ignore ${d.exe} from now on`;
+  ignore.addEventListener("click", () => saveSetting({ games: { addIgnore: d.exe } }, `${d.name} won't count as a game anymore`));
+  box.replaceChildren(ic, txt, ignore);
+}
+
+function renderProgList(id, items, label, remove, empty) {
+  const ul = $(id);
+  const sig = JSON.stringify(items);
+  if (ul.dataset.sig === sig) return;
+  ul.dataset.sig = sig;
+  if (!items.length) return ul.replaceChildren(...(empty ? [el("li", "empty", empty)] : []));
+  ul.replaceChildren(
+    ...items.map((it) => {
+      const [name, sub] = label(it);
+      const li = el("li");
+      const txt = el("div");
+      txt.append(el("b", null, name), ...(sub ? [el("small", "mono", sub)] : []));
+      const rm = el("button", "rm", "×");
+      rm.type = "button";
+      rm.setAttribute("aria-label", `Remove ${name}`);
+      rm.addEventListener("click", () => remove(it));
+      li.append(txt, rm);
+      return li;
+    })
+  );
+}
 $("ntBreak").addEventListener("change", (e) => saveSetting({ notify: { breakAfter: Number(e.target.value) } }));
 $("ntNudgeAt").addEventListener("change", (e) => e.target.value && saveSetting({ notify: { nudgeAt: e.target.value } }));
 $("ntTest").addEventListener("click", async () => {

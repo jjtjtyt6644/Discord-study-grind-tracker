@@ -9,6 +9,8 @@ import { startPresence, updatePresence, presenceState, buildActivity, PRIVACY_DE
 import { createFocus } from "./focus.js";
 import { questsToday, questTotals, QUEST_XP, ALL_QUESTS_BONUS } from "./quests.js";
 import { createNotifier, startReminders, NOTIFY_DEFAULTS } from "./notify.js";
+import { createGameDetector } from "./games.js";
+import { vocab } from "./vocab.js";
 import { computeProgress } from "./progress.js";
 import { update, checkForUpdate, checkIfStale, installLatest, restartIntoUpdate, startUpdateChecks } from "./updater.js";
 import { createStore } from "./store.js";
@@ -46,6 +48,16 @@ data.settings.autoUpdate ??= true;
 data.settings.privacy = { ...PRIVACY_DEFAULTS, ...data.settings.privacy };
 data.settings.notify = { ...NOTIFY_DEFAULTS, ...data.settings.notify };
 data.settings.theme ??= { preset: "mode", accent: null, accent2: null };
+data.settings.games = { detect: true, custom: [], ignore: [], ...data.settings.games };
+data.settings.activity ??= "study"; // "study" | "work": only changes the words
+data.settings.weekendGoal ??= null; // minutes, or null = same as weekdays
+
+// the goal for a given day (weekends can have their own)
+function goalFor(key = dayKey()) {
+  const dow = new Date(`${key}T12:00`).getDay();
+  return (dow === 0 || dow === 6) && data.settings.weekendGoal ? data.settings.weekendGoal : data.settings.goalMinutes;
+}
+const words = (text) => vocab(text, data.settings.activity);
 
 const day = (key = dayKey()) => (data.days[key] ??= { sessions: [], manualMinutes: 0, snapshot: null });
 const studyMin = (key) => studyMs(key) / 60_000;
@@ -90,8 +102,8 @@ function heatmap() {
 function todayLog() {
   const d = data.days[dayKey()] ?? { sessions: [], manualEntries: [] };
   const log = [
-    ...d.sessions.map((s) => ({ kind: "session", at: s.start, end: s.end, minutes: Math.round((s.end - s.start) / 60_000), subject: s.subject ?? null })),
-    ...(d.manualEntries ?? []).map((e) => ({ kind: "added", at: e.at, minutes: e.minutes, subject: e.subject ?? null })),
+    ...d.sessions.map((s) => ({ kind: "session", at: s.start, end: s.end, minutes: Math.round((s.end - s.start) / 60_000), subject: s.subject ?? null, note: s.note ?? null, focus: Boolean(s.focus) })),
+    ...(d.manualEntries ?? []).map((e) => ({ kind: "added", at: e.at, minutes: e.minutes, subject: e.subject ?? null, note: e.note ?? null })),
   ];
   // time added before the log existed has no entries; show it as one row so it can still be removed
   const legacy = (d.manualMinutes ?? 0) - (d.manualEntries ?? []).reduce((sum, e) => sum + e.minutes, 0);
@@ -139,11 +151,12 @@ function removeMinutes(m) {
 function exportCsv() {
   const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const time = (t) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-  const rows = [["date", "type", "start", "end", "minutes", "subject"]];
+  const rows = [["date", "type", "start", "end", "minutes", "subject", "note"]];
   for (const k of Object.keys(data.days).sort()) {
     const d = data.days[k];
-    for (const s of d.sessions) rows.push([k, "session", time(s.start), time(s.end), Math.round((s.end - s.start) / 60_000), s.subject]);
-    for (const e of d.manualEntries ?? []) rows.push([k, "added", time(e.at), "", e.minutes, e.subject]);
+    for (const s of d.sessions) rows.push([k, s.focus ? "focus" : "session", time(s.start), time(s.end), Math.round((s.end - s.start) / 60_000), s.subject, s.note]);
+    for (const e of d.manualEntries ?? []) rows.push([k, "added", time(e.at), "", e.minutes, e.subject, e.note]);
+    for (const g of d.games ?? []) rows.push([k, "game", time(g.start), time(g.end), Math.round((g.end - g.start) / 60_000), g.name, ""]);
   }
   return rows.map((r) => r.map(q).join(",")).join("\r\n");
 }
@@ -292,7 +305,7 @@ if (isDesktop) {
   const icon = readAsset("public/img/logo-small.png"); // toasts need the logo as a real file
   if (icon) writeFile(NOTIFY_ICON, icon).catch(() => {});
 }
-const notify = notifier.notify;
+const notify = (kind, title, body) => notifier.notify(kind, words(title), words(body));
 
 const focus = createFocus({
   data,
@@ -327,7 +340,8 @@ function todayFacts() {
 }
 
 function currentQuests() {
-  const q = questsToday(data, dayKey(), todayFacts());
+  const q = questsToday(data, dayKey(), todayFacts(), { ...data.settings, goalMinutes: goalFor() });
+  for (const x of q.list) x.text = words(x.text);
   if (q.fresh.length) {
     save();
     for (const text of q.fresh) notify("quests", `Quest complete  +${QUEST_XP} XP`, text);
@@ -341,11 +355,57 @@ startReminders({
   save,
   notify,
   getSettings: () => data.settings.notify,
-  facts: () => ({ ...todayFacts(), goal: data.settings.goalMinutes, budget: data.settings.playBudgetMinutes, activeSince: data.activeStudy, focusing: focus.isFocusing() }),
+  facts: () => ({ ...todayFacts(), goal: goalFor(), budget: data.settings.playBudgetMinutes, activeSince: data.activeStudy, focusing: focus.isFocusing() }),
+  recap: () => {
+    const q = currentQuests();
+    const p = computeProgress(data, studyMin, dayKey, questTotals(data), goalFor);
+    const t = todayFacts();
+    const hm = (m) => `${Math.floor(m / 60)}h ${String(Math.floor(m % 60)).padStart(2, "0")}m`;
+    return `${hm(t.studyMin)} studied · ${hm(t.played)} played · ${q.list.filter((x) => x.done).length}/3 quests · lv ${p.level} ${p.rank}`;
+  },
 });
 setInterval(currentQuests, 30_000).unref(); // quests also complete while the window is closed
 
 let artVersion = Date.now(); // bumped on upload so the dashboard reloads the images
+
+// ---------- any-game detection (Discord's game list + your own programs) ----------
+const games = createGameDetector({ cacheFile: path.join(APP_DIR, "games-db.json"), getSettings: () => data.settings.games });
+let lastSteam = null; // latest Steam result, so a Steam game isn't counted twice
+let detected = null; // what the last scan found (even if Steam is the one tracking it)
+const norm = (n) => String(n ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// finished detected-game sessions live in data.days[day].games; the running one in data.gameLive
+function endLiveGame(at) {
+  const live = data.gameLive;
+  if (!live) return;
+  const end = Math.max(live.start, Math.min(at, (live.seen ?? at) + 20_000)); // app closed meanwhile? stop at last sighting
+  (day(dayKey(new Date(live.start))).games ??= []).push({ name: live.name, start: live.start, end });
+  data.gameLive = null;
+}
+
+async function scanGames() {
+  const found = await games.scan().catch(() => null);
+  detected = found;
+  const steamGame = lastSteam?.profile.currentGame;
+  const g = found && !(steamGame && norm(steamGame.name) === norm(found.name)) ? found : null; // Steam already counts its own games
+  const live = data.gameLive;
+  if (live && (!g || g.name !== live.name)) {
+    endLiveGame(Date.now());
+    save();
+  }
+  if (g && !data.gameLive) {
+    data.gameLive = { name: g.name, icon: g.icon, exe: g.exe, source: g.source, start: Date.now(), seen: Date.now() };
+    save();
+    pushPresence();
+  } else if (data.gameLive) data.gameLive.seen = Date.now();
+}
+if (data.gameLive) setTimeout(scanGames, 3000); // finish or continue a game from before a restart
+
+function localPlayed(key) {
+  let min = (data.days[key]?.games ?? []).reduce((sum, g) => sum + (g.end - g.start) / 60_000, 0);
+  if (data.gameLive && dayKey(new Date(data.gameLive.start)) === key) min += (Date.now() - data.gameLive.start) / 60_000;
+  return min;
+}
 
 async function buildStats() {
   let steam = null;
@@ -363,14 +423,24 @@ async function buildStats() {
     return { date: k, minutes: Math.round(studyMs(k) / 60_000) };
   });
 
-  const playedMin = !steam ? 0 : steam.demo ? steam.demoPlayedToday : playedToday(steam);
-  // keep a per-day record of play time (the Budget Keeper badge needs past days)
-  if (steam && !steam.demo && day().playedMinutes !== Math.round(playedMin)) {
+  lastSteam = steam;
+  const steamPlayed = !steam ? 0 : steam.demo ? steam.demoPlayedToday : playedToday(steam);
+  const playedMin = steamPlayed + localPlayed(dayKey());
+  const steamGame = steam?.profile.currentGame;
+  // the game you're in, from Steam or detected on your PC
+  const game = steamGame
+    ? { name: steamGame.name, icon: steamGame.header, source: "steam", since: data.gameSession?.start ?? null }
+    : data.gameLive
+      ? { name: data.gameLive.name, icon: data.gameLive.icon, source: data.gameLive.source, since: data.gameLive.start }
+      : null;
+  // keep a per-day record of play time: budget alerts, quests, recap and badges all read it
+  // (Steam + detected games; skipped in demo mode so sample data never lands in your history)
+  if (!steam?.demo && day().playedMinutes !== Math.round(playedMin)) {
     day().playedMinutes = Math.round(playedMin);
     save();
   }
   const weekKeys = week.map((d) => d.date);
-  const mode = data.activeStudy ? "study" : steam?.profile.currentGame ? "gaming" : "idle";
+  const mode = data.activeStudy ? "study" : game ? "gaming" : "idle";
   const sessions = (data.days[dayKey()]?.sessions ?? []).map((s) => s.end - s.start);
 
   const stats = {
@@ -379,7 +449,7 @@ async function buildStats() {
     study: {
       todayMs: studyMs(dayKey()),
       activeSince: data.activeStudy,
-      goalMinutes: data.settings.goalMinutes,
+      goalMinutes: goalFor(),
       sessionsToday: sessions.length,
       longestSessionMs: Math.max(0, ...sessions),
       subject: data.activeSubject,
@@ -394,11 +464,13 @@ async function buildStats() {
     heatmap: heatmap(),
     quests: currentQuests(),
     focus: focus.state(),
-    progress: computeProgress(data, studyMin, dayKey, questTotals(data)),
+    progress: computeProgress(data, studyMin, dayKey, questTotals(data), goalFor),
+    game,
+    games: { ...games.info(), detect: data.settings.games.detect !== false, custom: data.settings.games.custom, ignore: data.settings.games.ignore, detected },
     played: {
       todayMinutes: playedMin,
       budgetMinutes: data.settings.playBudgetMinutes,
-      sessionStart: data.gameSession?.start ?? null,
+      sessionStart: game?.since ?? null,
     },
     steam: steam && { ...steam, playtimes: undefined },
     steamError,
@@ -414,11 +486,13 @@ async function buildStats() {
       update,
       dataDir: isDesktop ? APP_DIR : null,
     },
-    prefs: { privacy: data.settings.privacy, notify: data.settings.notify, theme: data.settings.theme, focus: data.settings.focus },
+    prefs: { privacy: data.settings.privacy, notify: data.settings.notify, theme: data.settings.theme, focus: data.settings.focus, activity: data.settings.activity, weekendGoal: data.settings.weekendGoal, weekdayGoal: data.settings.goalMinutes },
     art: { bg: hasCustomArt("bg.jpg"), logo: hasCustomArt("logo-small.png"), v: artVersion },
     inbox: notifier.inbox(),
   };
+  for (const b of stats.progress.badges) b.desc = words(b.desc);
   const activity = buildActivity(stats, process.env.LARGE_IMAGE, data.settings.privacy);
+  if (activity) for (const k of ["details", "state", "largeImageText"]) if (activity[k]) activity[k] = words(activity[k]);
   stats.discord = { ...presenceState(), activity };
   return stats;
 }
@@ -501,6 +575,20 @@ const routes = {
   "POST /api/focus/skip": async () => focus.skip(),
   "POST /api/focus/stop": async () => focus.stop(),
   "POST /api/notify/test": async () => notifier.test(),
+  // Settings → Games → "Add a program": what's running right now
+  "GET /api/processes": async () => ({ list: await games.candidates() }),
+  "POST /api/games/rescan": async () => scanGames(),
+  // a short note on a log entry ("chapter 4 problems")
+  "POST /api/study/note": async (body) => {
+    const at = Number(body.at);
+    const note = String(body.note ?? "").trim().slice(0, 140);
+    const d = data.days[dayKey(new Date(at))];
+    const item = body.kind === "session" ? d?.sessions.find((x) => x.start === at) : body.kind === "added" ? d?.manualEntries?.find((x) => x.at === at) : null;
+    if (!item) throw new Error("Entry not found");
+    if (note) item.note = note;
+    else delete item.note;
+    save();
+  },
   "POST /api/art/reset": async (body) => {
     const files = body.slot === "bg" ? ["bg.jpg"] : body.slot === "logo" ? ["logo-small.png", "logo.png"] : [];
     for (const f of files) await rm(path.join(ART_DIR, f), { force: true });
@@ -668,7 +756,8 @@ const routes = {
     };
     if (body.privacy) bools(data.settings.privacy, body.privacy, Object.keys(PRIVACY_DEFAULTS));
     if (body.notify) {
-      bools(data.settings.notify, body.notify, ["on", "goal", "budget", "focus", "quests", "nudge"]);
+      bools(data.settings.notify, body.notify, ["on", "goal", "budget", "focus", "quests", "nudge", "recap"]);
+      if (/^([01]\d|2[0-3]):[0-5]\d$/.test(body.notify.recapAt ?? "")) data.settings.notify.recapAt = body.notify.recapAt;
       if (body.notify.breakAfter != null) data.settings.notify.breakAfter = clamp(body.notify.breakAfter, 0, 600);
       if (/^([01]\d|2[0-3]):[0-5]\d$/.test(body.notify.nudgeAt ?? "")) data.settings.notify.nudgeAt = body.notify.nudgeAt;
     }
@@ -680,6 +769,24 @@ const routes = {
         accent: hex(body.theme.accent) ?? data.settings.theme.accent,
         accent2: hex(body.theme.accent2) ?? data.settings.theme.accent2,
       };
+    }
+    if (body.activity === "study" || body.activity === "work") data.settings.activity = body.activity;
+    if (body.weekendGoal !== undefined) data.settings.weekendGoal = body.weekendGoal ? clamp(body.weekendGoal, 1, MAX_MINUTES) : null;
+    if (body.games) {
+      const g = data.settings.games;
+      const exe = (v) => (/^[\w .()+-]{1,80}\.exe$/i.test(String(v ?? "").trim()) ? String(v).trim().toLowerCase() : null);
+      if (typeof body.games.detect === "boolean") g.detect = body.games.detect;
+      if (body.games.addCustom) {
+        const e = exe(body.games.addCustom.exe);
+        const name = String(body.games.addCustom.name ?? "").trim().slice(0, 60) || e?.replace(/\.exe$/, "");
+        if (!e) throw new Error("Pick a program (.exe) to add");
+        g.custom = [...g.custom.filter((c) => c.exe !== e), { exe: e, name }];
+        g.ignore = g.ignore.filter((x) => x !== e);
+      }
+      if (body.games.removeCustom) g.custom = g.custom.filter((c) => c.exe !== String(body.games.removeCustom).toLowerCase());
+      if (body.games.addIgnore && exe(body.games.addIgnore)) g.ignore = [...new Set([...g.ignore, exe(body.games.addIgnore)])];
+      if (body.games.removeIgnore) g.ignore = g.ignore.filter((x) => x !== String(body.games.removeIgnore).toLowerCase());
+      setTimeout(scanGames, 100); // apply right away
     }
     if (body.focus) {
       const f = data.settings.focus;
@@ -905,6 +1012,8 @@ async function start() {
   if (isDesktop && !background) showWindow();
 
   startPresence(process.env.DISCORD_CLIENT_ID);
+  scanGames();
+  setInterval(scanGames, 15_000);
   setInterval(pushPresence, 15_000);
   pushPresence();
   startUpdater();

@@ -46,14 +46,14 @@ function pick(day) {
  * @param data  data.json object (completions live in data.quests[day])
  * @param facts today's facts (studyMin, sessions45, …)
  */
-export function questsToday(data, day, facts) {
+export function questsToday(data, day, facts, settings = data.settings) {
   data.quests ??= {};
   const rec = (data.quests[day] ??= { ids: pick(day), done: {} });
   const fresh = [];
   const list = rec.ids.map((id) => {
     const q = POOL.find((x) => x.id === id);
-    const need = q.need(data.settings);
-    const have = Math.min(need, Math.floor(q.have(facts, data.settings)));
+    const need = q.need(settings);
+    const have = Math.min(need, Math.floor(q.have(facts, settings)));
     if (have >= need && !rec.done[id]) {
       rec.done[id] = Date.now();
       fresh.push(q.text);

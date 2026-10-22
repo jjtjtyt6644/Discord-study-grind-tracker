@@ -4,7 +4,7 @@
 //   - Everywhere: an in-app "inbox" the dashboard shows as toasts (used when there are no Windows toasts).
 import { execFile } from "node:child_process";
 
-export const NOTIFY_DEFAULTS = { on: true, goal: true, budget: true, focus: true, quests: true, breakAfter: 90, nudge: false, nudgeAt: "19:00" };
+export const NOTIFY_DEFAULTS = { on: true, goal: true, budget: true, focus: true, quests: true, breakAfter: 90, nudge: false, nudgeAt: "19:00", recap: false, recapAt: "21:30" };
 
 // Windows PowerShell can raise toasts through the WinRT API. Text and paths go in via env vars
 // and createTextNode, so nothing user-typed is ever spliced into the script.
@@ -50,7 +50,7 @@ export function createNotifier({ windowsToasts, iconPath, getSettings }) {
  * and the optional "haven't studied today" nudge. Each fires once (per day / per session).
  * @param facts () => { day, studyMin, goal, played, budget, activeSince, focusing }
  */
-export function startReminders({ data, save, notify, facts, getSettings }) {
+export function startReminders({ data, save, notify, facts, getSettings, recap }) {
   const hm = (m) => `${Math.floor(m / 60)}h ${String(Math.floor(m % 60)).padStart(2, "0")}m`;
   setInterval(() => {
     const s = { ...NOTIFY_DEFAULTS, ...getSettings() };
@@ -72,6 +72,13 @@ export function startReminders({ data, save, notify, facts, getSettings }) {
       const mins = (Date.now() - f.activeSince) / 60_000;
       const step = Math.floor(mins / s.breakAfter);
       if (step >= 1) once(`break-${f.activeSince}-${step}`, "breakAfter", "Time for a short break", `You've been studying for ${hm(mins)}. Five minutes away from the screen helps.`);
+    }
+
+    // end-of-day summary at the chosen time
+    if (s.recap && recap) {
+      const [h, m] = s.recapAt.split(":").map(Number);
+      const now = new Date();
+      if (now.getHours() * 60 + now.getMinutes() >= h * 60 + m) once("recap", "recap", "Today's recap", recap());
     }
 
     if (s.nudge && f.studyMin < 1) {

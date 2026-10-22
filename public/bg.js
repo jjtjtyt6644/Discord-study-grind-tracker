@@ -195,3 +195,31 @@ window.GT_applyTheme = (theme) => {
   const [a, b] = colors.map(rgb);
   window.BG.setPalette([a, b, a.map((v) => v * 0.35)]); // third: a deep version of the main color
 };
+
+// "Working" mode: swap study words for work words in the page text (studied → worked, Studying → Working…).
+// Things you typed yourself (subjects, notes, game names) sit inside [data-raw] and are left alone.
+// Each text node remembers its original, so switching back to Studying restores it exactly.
+window.GT_words = (text, activity) =>
+  activity === "work" && typeof text === "string"
+    ? text.replace(/\b([Ss])tud(y|ied|ying|ies)\b/g, (_, s, f) => `${s === "S" ? "W" : "w"}ork${{ y: "", ied: "ed", ying: "ing", ies: "s" }[f]}`)
+    : text;
+(() => {
+  const seen = new WeakMap(); // text node → { base, out }
+  const SKIP = "script,style,textarea,[data-raw],input,select,option";
+  window.GT_vocab = (activity) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.parentElement?.closest(SKIP) || !n.nodeValue.trim() ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      let rec = seen.get(n);
+      if (!rec || n.nodeValue !== rec.out) rec = { base: n.nodeValue }; // new node, or the app rewrote it
+      rec.out = window.GT_words(rec.base, activity);
+      if (n.nodeValue !== rec.out) n.nodeValue = rec.out;
+      seen.set(n, rec);
+    }
+    for (const el of document.querySelectorAll("input[placeholder]")) {
+      el.dataset.ph ??= el.placeholder;
+      el.placeholder = window.GT_words(el.dataset.ph, activity);
+    }
+  };
+})();

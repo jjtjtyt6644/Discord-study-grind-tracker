@@ -44,9 +44,8 @@ const BADGES = [
  * @param studyMin  (dayKey) => minutes studied that day, including a running session
  * @param dayKey    (Date?) => "YYYY-MM-DD" in local time
  */
-export function computeProgress(data, studyMin, dayKey, quests = { xp: 0, fullDays: 0 }) {
+export function computeProgress(data, studyMin, dayKey, quests = { xp: 0, fullDays: 0 }, goalFor = () => data.settings.goalMinutes) {
   const { days, settings } = data;
-  const goal = settings.goalMinutes;
   const today = dayKey();
 
   const sessions = Object.values(days).flatMap((d) => d.sessions ?? []);
@@ -66,6 +65,7 @@ export function computeProgress(data, studyMin, dayKey, quests = { xp: 0, fullDa
   for (const k of keys) {
     const min = studyMin(k);
     s.totalMin += min;
+    const goal = goalFor(k);
     if (min >= goal) s.goalDays++;
     const played = days[k]?.playedMinutes;
     if (min >= goal && played != null && played <= settings.playBudgetMinutes) s.budgetDay = true;
@@ -97,7 +97,7 @@ export function computeProgress(data, studyMin, dayKey, quests = { xp: 0, fullDa
   for (const end = new Date(`${today}T12:00`); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
     const min = studyMin(dayKey(cursor));
     run = min > 0 ? run + 1 : 0;
-    goalRun = min >= goal ? goalRun + 1 : 0;
+    goalRun = min >= goalFor(dayKey(cursor)) ? goalRun + 1 : 0;
     s.bestStreak = Math.max(s.bestStreak, run);
     s.bestGoalStreak = Math.max(s.bestGoalStreak, goalRun);
     if (min > 0) {

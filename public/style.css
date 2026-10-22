@@ -352,7 +352,7 @@ dialog input { width: 90px; flex: none; }
 
 /* ============ level pill ============ */
 .lvl-pill {
-  margin-left: 4px; padding: 3px 9px; border-radius: 6px; text-decoration: none;
+  margin-left: 4px; padding: 3px 9px; white-space: nowrap; border-radius: 6px; text-decoration: none;
   font: 700 11px var(--mono); letter-spacing: .08em; color: var(--ink); background: var(--accent);
   box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 50%, transparent);
 }
@@ -694,6 +694,40 @@ body.no-art .about-art { display: none; }
   .toc { grid-template-columns: 1fr; }
 }
 
+/* ============ studying / working switch ============ */
+.act-toggle { display: flex; gap: 2px; padding: 3px; margin-left: 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-2); }
+.act-toggle button { height: 26px; padding: 0 12px; border: 0; border-radius: 7px; background: none; color: var(--muted); font: 600 12px var(--display); letter-spacing: .06em; cursor: pointer; transition: background .2s, color .2s; }
+.act-toggle button:hover { color: var(--text); }
+.act-toggle button[aria-checked="true"] { background: var(--accent); color: var(--ink); box-shadow: 0 0 14px -4px var(--accent); }
+@media (max-width: 560px) { .act-toggle { order: 4; margin: 6px 0 0; } }
+
+/* ============ games (settings) + log notes ============ */
+.now-game { display: flex; align-items: center; gap: 14px; }
+.now-game > b { font: 600 15px var(--display); }
+.now-game > small { margin: 0 0 0 auto; }
+.ng-ic { width: 52px; height: 52px; flex: none; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--ink); font: 700 22px var(--display); }
+.ng-ic img { width: 100%; height: 100%; object-fit: cover; }
+.ng-txt { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.ng-txt small:first-child { font: 700 10px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--good); }
+.prog-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.prog-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(0,0,0,.2); }
+.prog-list li > div { flex: 1; min-width: 0; }
+.prog-list li b { font: 600 13px var(--display); }
+.prog-list li small { display: block; color: var(--dim); font-size: 11px; }
+.prog-list .rm { width: 26px; height: 26px; border: 0; border-radius: 6px; background: none; color: var(--dim); cursor: pointer; font-size: 16px; }
+.prog-list .rm:hover { color: var(--warn); background: var(--surface-3); }
+.prog-list .empty { color: var(--dim); font-size: 12px; background: none; padding: 4px 0; }
+.add-prog { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 12px; }
+.add-prog select, .add-prog input { width: 100%; height: 38px; }
+.add-prog .btn-ghost { height: 38px; width: 40px; padding: 0; }
+.add-prog .btn-solid { height: 38px; }
+.lnote-btn { height: 24px; padding: 0 8px; border-radius: 6px; border: 1px dashed var(--line-2); background: none; color: var(--dim); font: 600 11px var(--display); cursor: pointer; white-space: nowrap; }
+.lnote-btn:hover { color: var(--text); border-color: var(--accent); }
+.lrow { flex-wrap: wrap; }
+.lnote { order: 1; flex-basis: 100%; padding-left: 2px; font-size: 12px; color: var(--muted); font-style: italic; }
+.lnote::before { content: "“"; } .lnote::after { content: "”"; }
+.lnote-in { order: 1; flex-basis: 100%; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--accent); background: rgba(0,0,0,.35); color: var(--text); font: 13px Inter, sans-serif; }
+
 /* ============ focus timer ============ */
 .c-session h2 .sess-mode { margin-left: auto; }
 .focus-view { display: grid; justify-items: center; gap: 14px; margin: 4px 0 6px; }
@@ -882,6 +916,7 @@ dialog.settings-dlg[open] { display: block; animation: pop .28s cubic-bezier(.3,
 .set-card.master { border-color: color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 7%, var(--surface-2)); }
 .set-card.rows.off { opacity: .45; pointer-events: none; filter: grayscale(.5); }
 .switch-row.static { cursor: default; }
+.switch-row .custom-min { display: flex; flex: none; }
 .sel { height: 34px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--line-2); background: rgba(0,0,0,.35); color: var(--text); font: 600 13px var(--display); color-scheme: dark; }
 .nudge-ctl { display: flex !important; align-items: center; gap: 12px; flex-direction: row !important; flex: none; }
 .nudge-ctl input[type="time"] { width: 150px; padding: 0 10px; font: 600 13px var(--mono); }
