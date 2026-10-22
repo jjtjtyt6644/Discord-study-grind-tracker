@@ -1,7 +1,7 @@
 // Daily quests: 3 missions a day, picked from a pool by the date (so they're stable all day and
 // the same after a restart). Completing one is permanent for that day and gives bonus XP.
-export const QUEST_XP = 30;
-export const ALL_QUESTS_BONUS = 50;
+export const QUEST_XP = 50;
+export const ALL_QUESTS_BONUS = 100;
 
 // have(t) reads today's facts (see todayFacts in server.js); need may depend on settings
 const POOL = [
@@ -90,5 +90,5 @@ export function questTotals(data) {
       fullDays++;
     }
   }
-  return { xp, fullDays };
+  return { xp, fullDays, perQuest: QUEST_XP, allBonus: ALL_QUESTS_BONUS };
 }

@@ -641,12 +641,18 @@ function renderProgress() {
   $("lvlNum").textContent = p.level;
   $("rankName").textContent = p.rank;
   $("xpNow").textContent = `${p.xp.toLocaleString()} XP`;
-  $("xpNext").textContent = `${(p.nextXp - p.xp).toLocaleString()} XP to level ${p.level + 1}`;
-  $("xpFill").style.width = `${((p.xp - p.levelXp) / (p.nextXp - p.levelXp)) * 100}%`;
+  $("xpNext").textContent = p.maxed ? `Level ${p.maxLevel}: max level` : `${(p.nextXp - p.xp).toLocaleString()} XP to level ${p.level + 1}`;
+  $("xpFill").style.width = p.maxed ? "100%" : `${((p.xp - p.levelXp) / (p.nextXp - p.levelXp)) * 100}%`;
+  // the 5 divisions of the current rank (I-V)
+  const divs = $("rankDivs");
+  if (divs.children.length !== 5) divs.replaceChildren(...["I", "II", "III", "IV", "V"].map((d) => el("i", null, d)));
+  [...divs.children].forEach((d, i) => (d.className = i < p.division ? "done" : i === p.division ? "now" : ""));
+  const r = p.rules;
+  $("xpRule").textContent = `${r.xpPerMinute} XP per minute studied · +${r.xpPerGoalDay} XP each goal day · +${r.xpPerQuest} XP per quest`;
   const next = $("nextRank");
   next.replaceChildren();
   if (p.nextRank) next.append("Next rank: ", el("b", null, p.nextRank.name), ` at level ${p.nextRank.level}`);
-  else next.textContent = "Max rank reached. Legendary.";
+  else next.textContent = p.maxed ? "Legend V. You've reached the top." : "Final rank: Legend. Push to level 50.";
 
   // celebrate new levels and badges, but not on the very first visit
   const unlocked = p.badges.filter((b) => b.unlocked).map((b) => b.id);
@@ -1199,7 +1205,13 @@ function renderFocus() {
   lastPhase = f.phase;
 
   const s = f.settings ?? {};
-  $("fHint").textContent = `${s.focus ?? 25} min focus · ${s.short ?? 5} min breaks · ${s.long ?? 15} min long break every ${s.every ?? 4}. Change in ⚙ Settings → Focus timer.`;
+  for (const k of ["focus", "short", "long", "every"]) {
+    const input = $(`fl-${k}`);
+    if (document.activeElement !== input && !input.dataset.pending) input.value = s[k] ?? "";
+  }
+  const key = [s.focus, s.short, s.long, s.every].join(",");
+  document.querySelectorAll("#fPresets button").forEach((b) => b.classList.toggle("on", b.dataset.p === key));
+  $("fHint").textContent = running ? "Changes apply from the next phase." : "Set the lengths here, then hit Start focus.";
   $("fStart").hidden = running && f.phase !== "ready";
   $("fStart").querySelector("span").textContent = f.phase === "ready" ? "Start next round" : "Start focus";
   $("fSkip").hidden = !running || f.phase === "ready";
@@ -1252,6 +1264,52 @@ function chime(dir) {
 }
 
 const focusCall = (path) => api(path, {}).then(apply).catch((err) => toast(err.message, true));
+
+// focus lengths, editable right on the card: +/- steps, typing, or a preset
+const F_STEP = { focus: 5, short: 1, long: 5, every: 1 };
+const F_MAX = { focus: 240, short: 120, long: 240, every: 12 };
+function saveFocusLen(k, v) {
+  const input = $(`fl-${k}`);
+  v = Math.min(F_MAX[k], Math.max(1, Math.round(v) || 1));
+  input.value = v;
+  input.dataset.pending = "1"; // keep the typed value until the server confirms
+  clearTimeout(saveFocusLen[k]);
+  saveFocusLen[k] = setTimeout(async () => {
+    try {
+      apply(await api("/api/settings", { focus: { [k]: v } }));
+    } catch (err) {
+      toast(err.message, true);
+    }
+    delete input.dataset.pending;
+    renderFocus();
+  }, 450); // a few quick clicks on +/- become one save
+}
+document.querySelectorAll(".f-len").forEach((box) => {
+  const k = box.dataset.k;
+  const input = $(`fl-${k}`);
+  box.querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => {
+      const cur = Number(input.value) || 1;
+      const d = Number(b.dataset.d);
+      // focus/long move in 5s but can still land on 1-4
+      const next = d > 0 ? (cur < F_STEP[k] ? cur + 1 : cur + F_STEP[k]) : cur <= F_STEP[k] ? cur - 1 : cur - F_STEP[k];
+      saveFocusLen(k, next);
+    })
+  );
+  input.addEventListener("change", () => saveFocusLen(k, Number(input.value)));
+  input.addEventListener("keydown", (e) => e.key === "Enter" && (e.preventDefault(), input.blur()));
+});
+document.querySelectorAll("#fPresets button").forEach((b) =>
+  b.addEventListener("click", async () => {
+    const [focus, short, long, every] = b.dataset.p.split(",").map(Number);
+    try {
+      apply(await api("/api/settings", { focus: { focus, short, long, every } }));
+      toast(`${b.textContent}: ${focus} min focus, ${short} min breaks`);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  })
+);
 $("fStart").addEventListener("click", () => focusCall("/api/focus/start"));
 $("fSkip").addEventListener("click", () => focusCall("/api/focus/skip"));
 $("fStop").addEventListener("click", () => focusCall("/api/focus/stop"));
@@ -1417,6 +1475,7 @@ function renderSettings(full = false) {
   $("ntList").classList.toggle("off", nt.on === false);
   $("ntBreak").value = String(nt.breakAfter ?? 90);
   if (document.activeElement !== $("ntNudgeAt")) $("ntNudgeAt").value = nt.nudgeAt ?? "19:00";
+  $("ntNudgeAt").disabled = nt.nudge !== true; // the time only matters when the nudge is on
   $("ntWhere").textContent = a.desktop ? "Sends a Windows notification right now." : "Shows a test notification inside the dashboard.";
 
   // appearance
@@ -1571,22 +1630,14 @@ async function uploadArt(slot, blob) {
   if (!res.ok) throw new Error(out.error);
 }
 
-// square-crop from the center and scale, as a PNG (the logo shows as a circle everywhere)
-async function squarePng(file, size) {
-  const bmp = await createImageBitmap(file);
-  const side = Math.min(bmp.width, bmp.height);
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  c.getContext("2d").drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, size, size);
-  return new Promise((r) => c.toBlob(r, "image/png"));
-}
-
 $("artBgIn").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
+  const crop = await cropImage(file, { title: "Crop character art", aspect: 9 / 16, round: false });
+  if (!crop) return;
   try {
-    await uploadArt("bg", file);
+    await uploadArt("bg", await crop(900, 1600, "image/jpeg"));
     refreshArt();
     toast("Character art updated");
   } catch (err) {
@@ -1597,15 +1648,152 @@ $("artLogoIn").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
+  const crop = await cropImage(file, { title: "Crop logo", aspect: 1, round: true });
+  if (!crop) return;
   try {
-    await uploadArt("logo", await squarePng(file, 256));
-    await uploadArt("logo-full", await squarePng(file, 1024)); // full size, for the Discord Developer Portal
+    await uploadArt("logo", await crop(256, 256, "image/png"));
+    await uploadArt("logo-full", await crop(1024, 1024, "image/png")); // full size, for the Discord Developer Portal
     refreshArt();
     toast("Logo updated");
   } catch (err) {
     toast(err.message, true);
   }
 });
+
+/* ---- image cropper: the frame stays put, you drag and zoom the image behind it ---- */
+/**
+ * Opens the crop dialog. Resolves to null on cancel, or to crop(width, height, type) → Blob
+ * that renders exactly what was inside the frame at that output size.
+ */
+function cropImage(file, { title, aspect, round }) {
+  return new Promise((resolve, reject) => {
+    const dlg = $("cropDlg");
+    const view = $("cropView");
+    const img = $("cropImg");
+    const zoom = $("cropZoom");
+    const url = URL.createObjectURL(file);
+    $("cropTitle").textContent = title;
+    view.classList.toggle("round", round);
+    view.style.aspectRatio = String(aspect);
+
+    let s0 = 1; // "cover" scale at zoom 1
+    let z = 1;
+    let x = 0;
+    let y = 0;
+    // layout size, not getBoundingClientRect: the dialog's opening animation scales it
+    const size = () => ({ width: view.clientWidth, height: view.clientHeight });
+    const clamp = () => {
+      const { width: vw, height: vh } = size();
+      const sc = s0 * z;
+      x = Math.min(0, Math.max(vw - img.naturalWidth * sc, x));
+      y = Math.min(0, Math.max(vh - img.naturalHeight * sc, y));
+    };
+    const draw = () => {
+      clamp();
+      img.style.transform = `translate(${x}px, ${y}px) scale(${s0 * z})`;
+    };
+    const fit = () => {
+      const { width: vw, height: vh } = size();
+      s0 = Math.max(vw / img.naturalWidth, vh / img.naturalHeight);
+      z = 1;
+      zoom.value = "1";
+      x = (vw - img.naturalWidth * s0) / 2; // centered
+      y = (vh - img.naturalHeight * s0) / 2;
+      draw();
+    };
+    // zoom around a point in the frame (the cursor, or the center for the slider)
+    const zoomTo = (nz, px, py) => {
+      nz = Math.min(4, Math.max(1, nz));
+      const { width: vw, height: vh } = size();
+      px ??= vw / 2;
+      py ??= vh / 2;
+      const ix = (px - x) / (s0 * z);
+      const iy = (py - y) / (s0 * z);
+      z = nz;
+      zoom.value = String(z);
+      x = px - ix * s0 * z;
+      y = py - iy * s0 * z;
+      draw();
+    };
+
+    let drag = null;
+    const down = (e) => {
+      drag = { px: e.clientX, py: e.clientY, x, y };
+      view.setPointerCapture(e.pointerId);
+      view.classList.add("dragging");
+    };
+    const move = (e) => {
+      if (!drag) return;
+      x = drag.x + e.clientX - drag.px;
+      y = drag.y + e.clientY - drag.py;
+      draw();
+    };
+    const up = () => {
+      drag = null;
+      view.classList.remove("dragging");
+    };
+    const wheel = (e) => {
+      e.preventDefault();
+      const r = view.getBoundingClientRect();
+      const k = view.clientWidth / r.width; // screen px → frame px (in case it's scaled)
+      zoomTo(z * (e.deltaY < 0 ? 1.08 : 1 / 1.08), (e.clientX - r.left) * k, (e.clientY - r.top) * k);
+    };
+    const slide = () => zoomTo(Number(zoom.value));
+
+    const cleanup = () => {
+      view.removeEventListener("pointerdown", down);
+      view.removeEventListener("pointermove", move);
+      view.removeEventListener("pointerup", up);
+      view.removeEventListener("wheel", wheel);
+      zoom.removeEventListener("input", slide);
+      $("cropReset").onclick = $("cropSave").onclick = $("cropCancel").onclick = dlg.oncancel = null;
+      dlg.close();
+    };
+    $("cropCancel").onclick = dlg.oncancel = (e) => {
+      e?.preventDefault?.();
+      cleanup();
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    $("cropReset").onclick = fit;
+    $("cropSave").onclick = () => {
+      const { width: vw } = size();
+      const crop = { x, y, scale: s0 * z, vw };
+      cleanup();
+      resolve(
+        (w, h, type) =>
+          new Promise((done) => {
+            const c = document.createElement("canvas");
+            c.width = w;
+            c.height = h;
+            const r = w / crop.vw; // frame px → output px
+            const ctx = c.getContext("2d");
+            ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(img, crop.x * r, crop.y * r, img.naturalWidth * crop.scale * r, img.naturalHeight * crop.scale * r);
+            c.toBlob(done, type, 0.92);
+          })
+      );
+    };
+
+    view.addEventListener("pointerdown", down);
+    view.addEventListener("pointermove", move);
+    view.addEventListener("pointerup", up);
+    view.addEventListener("wheel", wheel, { passive: false });
+    zoom.addEventListener("input", slide);
+    img.onerror = () => {
+      cleanup();
+      reject(new Error("That image couldn't be opened"));
+    };
+    img.onload = () => {
+      dlg.showModal();
+      setTimeout(fit, 30); // the frame needs to be on screen (laid out) to measure it
+    };
+    img.src = url;
+  }).catch((err) => {
+    toast(err.message, true);
+    return null;
+  });
+}
 document.querySelectorAll("[data-reset]").forEach((b) =>
   b.addEventListener("click", async () => {
     try {

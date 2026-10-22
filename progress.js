@@ -1,22 +1,20 @@
 // XP, levels and badges. Everything is derived from the study history in data.json - nothing extra is stored,
 // so old sessions count too and changing a rule re-scores your whole history.
 
-const XP_PER_GOAL_DAY = 60; // bonus on top of 1 XP per minute studied
+const XP_PER_MINUTE = 2;
+const XP_PER_GOAL_DAY = 100; // bonus for every day you hit your goal
+export const MAX_LEVEL = 50;
 
-const RANKS = [
-  [0, "Rookie"],
-  [3, "Apprentice"],
-  [6, "Scholar"],
-  [10, "Strategist"],
-  [15, "Sage"],
-  [20, "Mastermind"],
-  [30, "Legend"],
-];
+// 10 ranks x 5 divisions (I-V) = levels 1-50
+const TIERS = ["Rookie", "Apprentice", "Scholar", "Strategist", "Sage", "Mastermind", "Virtuoso", "Grandmaster", "Mythic", "Legend"];
+const DIVISIONS = ["I", "II", "III", "IV", "V"];
 
-// level L needs 50·L·(L+1) XP in total: L1 = 100 (~1.7h), L5 = 1500, L10 = 5500
-const xpAt = (level) => 50 * level * (level + 1);
-const levelFromXp = (xp) => Math.floor((-1 + Math.sqrt(1 + (4 * xp) / 50)) / 2);
-const rankFor = (level) => RANKS.filter(([min]) => level >= min).at(-1)[1];
+// level L needs 25·(L−1)·L XP in total. At 2 XP/min: L2 ≈ 25 min, L5 ≈ 4h, L10 ≈ 19h, L25 ≈ 125h, L50 ≈ 510h
+const xpAt = (level) => 25 * (level - 1) * level;
+const levelFromXp = (xp) => Math.min(MAX_LEVEL, Math.max(1, Math.floor((1 + Math.sqrt(1 + (4 * xp) / 25)) / 2)));
+const tierOf = (level) => TIERS[Math.floor((level - 1) / 5)];
+const divisionOf = (level) => DIVISIONS[(level - 1) % 5];
+const rankFor = (level) => `${tierOf(level)} ${divisionOf(level)}`;
 
 // cat groups badges in the UI; need/have drive the progress bar
 const BADGES = [
@@ -119,18 +117,30 @@ export function computeProgress(data, studyMin, dayKey, quests = { xp: 0, fullDa
     if (startH >= 4 && startH < 7) s.early = true;
   }
 
-  const xp = Math.round(s.totalMin) + XP_PER_GOAL_DAY * s.goalDays + quests.xp; // quests: 30 each, +50 for all 3
+  const xp = Math.round(s.totalMin * XP_PER_MINUTE) + XP_PER_GOAL_DAY * s.goalDays + quests.xp;
   const level = levelFromXp(xp);
-  const next = RANKS.find(([min]) => min > level);
+  const maxed = level >= MAX_LEVEL;
+  const nextTierLevel = Math.floor((level - 1) / 5) * 5 + 6; // first level of the next rank
   return {
     xp,
     level,
     rank: rankFor(level),
+    tier: tierOf(level),
+    division: (level - 1) % 5, // 0-4 → I-V
+    maxed,
+    maxLevel: MAX_LEVEL,
     levelXp: xpAt(level),
-    nextXp: xpAt(level + 1),
-    nextRank: next ? { level: next[0], name: next[1] } : null,
+    nextXp: maxed ? null : xpAt(level + 1),
+    nextRank: nextTierLevel <= MAX_LEVEL ? { level: nextTierLevel, name: `${tierOf(nextTierLevel)} I` } : null,
     // the rules, so the Guide page explains exactly what the code does
-    rules: { xpPerMinute: 1, xpPerGoalDay: XP_PER_GOAL_DAY, xpPerQuest: 30, xpAllQuests: 50, ranks: RANKS.map(([level, name]) => ({ level, name, xp: xpAt(level) })) },
+    rules: {
+      xpPerMinute: XP_PER_MINUTE,
+      xpPerGoalDay: XP_PER_GOAL_DAY,
+      xpPerQuest: quests.perQuest ?? 0,
+      xpAllQuests: quests.allBonus ?? 0,
+      maxLevel: MAX_LEVEL,
+      ranks: TIERS.map((name, i) => ({ level: i * 5 + 1, toLevel: i * 5 + 5, name, xp: xpAt(i * 5 + 1) })),
+    },
     badges: BADGES.map((b) => {
       const have = Math.min(b.need, Math.floor(b.have(s)));
       return { id: b.id, cat: b.cat, name: b.name, icon: b.icon, desc: b.desc, unlocked: have >= b.need, have, need: b.need };

@@ -34,12 +34,12 @@ You also need the **Discord desktop app** running. Rich Presence doesn't work in
 - **Subjects**: tag sessions (Math, Coding, or your own). Pick one with the chips above the timer, a row in the Subjects card, or <kbd>1</kbd>–<kbd>9</kbd>. Switching mid-session splits the time correctly.
 - **Fix your time**: **+ Add** time you forgot to track, **− Remove** time you added by mistake, or click any entry in **Today's log** to edit or delete it.
 - **"Still studying?"**: after 3 hours nonstop, it checks that you didn't forget the timer.
-- **Focus timer (Pomodoro)**: switch the Session card to **Focus** for timed rounds (25/5 by default, with a long break every 4). It has a countdown ring, a chime between phases, and keeps running with the window closed. Rounds count as study time. Presets: Classic 25/5, Deep 50/10, Flow 90/15, Sprint 15/3.
+- **Focus timer (Pomodoro)**: switch the Session card to **Focus** for timed rounds (25/5 by default, with a long break every 4). It has a countdown ring, a chime between phases, and keeps running with the window closed. Rounds count as study time. Change the lengths right on the card with the +/− steppers, or pick Classic 25/5, Deep 50/10, Flow 90/15 or Sprint 15/3.
 - **Played today**: pulled from Steam automatically, including the game you're in right now.
 
 **Progress**
-- **Daily quests**: 3 new missions every day (e.g. "Finish 2 sessions of 45m+", "Complete 2 focus rounds", "Start before 10am"). +30 XP each, +50 for clearing all 3, plus a quest streak.
-- **XP, levels & ranks**: 1 XP per minute studied, plus 60 XP every day you hit your goal. Rank up from Rookie → Apprentice → Scholar → Strategist → Sage → Mastermind → Legend, with a full-screen LEVEL UP moment.
+- **Daily quests**: 3 new missions every day (e.g. "Finish 2 sessions of 45m+", "Complete 2 focus rounds", "Start before 10am"). +50 XP each, +100 for clearing all 3, plus a quest streak.
+- **XP, levels & ranks**: 2 XP per minute studied, +100 XP every day you hit your goal, and quest XP on top. **50 levels**: 10 ranks with 5 divisions each (Rookie I → Apprentice → Scholar → Strategist → Sage → Mastermind → Virtuoso → Grandmaster → Mythic → Legend V), with a full-screen LEVEL UP moment. Level 2 takes about 25 minutes; Legend V is the long game.
 - **18 badges** across streaks, focus, habits, goals, balance, subjects and total time. Click a badge to see what it's for and how close you are.
 - **Year heatmap**: a GitHub-style grid of every day you studied, with totals and your best day.
 - **Daily goal + game budget**: segmented progress bars, a 7-day chart, a streak counter, and confetti when you hit your goal.
@@ -115,7 +115,7 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Study history, settings | `%APPDATA%\GrindTracker\data.json` | `data.json` in the project folder |
 | Your keys | `%APPDATA%\GrindTracker\.env` | `.env` in the project folder |
 | Log | `%APPDATA%\GrindTracker\grind-tracker.log` | the terminal |
-| Custom art | ⚙ **Settings → Appearance → Upload** (stored in `%APPDATA%\GrindTracker\img\`) | same, stored in `img/` in the project folder |
+| Custom art | ⚙ **Settings → Appearance → Upload**, then drag and zoom to crop it (stored in `%APPDATA%\GrindTracker\img\`) | same, stored in `img/` in the project folder |
 
 Open the folder from ⚙ **Settings → Data & backups**, or paste `%APPDATA%\GrindTracker` into File Explorer.
 

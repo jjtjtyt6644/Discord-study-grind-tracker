@@ -7,7 +7,7 @@ import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, op
 import { getSteam, getAchievementsFor, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
 import { startPresence, updatePresence, presenceState, buildActivity, PRIVACY_DEFAULTS } from "./presence.js";
 import { createFocus } from "./focus.js";
-import { questsToday, questTotals } from "./quests.js";
+import { questsToday, questTotals, QUEST_XP, ALL_QUESTS_BONUS } from "./quests.js";
 import { createNotifier, startReminders, NOTIFY_DEFAULTS } from "./notify.js";
 import { computeProgress } from "./progress.js";
 import { update, checkForUpdate, checkIfStale, installLatest, restartIntoUpdate, startUpdateChecks } from "./updater.js";
@@ -330,8 +330,8 @@ function currentQuests() {
   const q = questsToday(data, dayKey(), todayFacts());
   if (q.fresh.length) {
     save();
-    for (const text of q.fresh) notify("quests", "Quest complete  +30 XP", text);
-    if (q.allDone) notify("quests", "All 3 quests cleared  +50 XP", `Quest streak: ${q.streak} day${q.streak === 1 ? "" : "s"}. See you tomorrow.`);
+    for (const text of q.fresh) notify("quests", `Quest complete  +${QUEST_XP} XP`, text);
+    if (q.allDone) notify("quests", `All 3 quests cleared  +${ALL_QUESTS_BONUS} XP`, `Quest streak: ${q.streak} day${q.streak === 1 ? "" : "s"}. See you tomorrow.`);
   }
   return q;
 }

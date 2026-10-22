@@ -92,13 +92,13 @@
           <h2><span>04</span>XP &amp; ranks</h2>
           <p>XP is calculated from your <b>whole study history</b> every time the dashboard refreshes, so nothing can get out of sync:</p>
           <div class="formula">
-            <div><b id="ruleMin">1 XP</b><span>per minute studied</span></div>
+            <div><b id="ruleMin">2 XP</b><span>per minute studied</span></div>
             <i>+</i>
-            <div><b id="ruleGoal">60 XP</b><span>bonus for each day you hit your goal</span></div>
+            <div><b id="ruleGoal">100 XP</b><span>bonus for each day you hit your goal</span></div>
           </div>
-          <p>Each level needs a bit more XP than the last: level <i>L</i> takes <code>50 × L × (L + 1)</code> XP in total. You start as a <b>Rookie</b> and work up through the ranks:</p>
+          <p>There are <b>50 levels</b>: 10 ranks with 5 divisions each (I → V), from <b>Rookie I</b> to <b>Legend V</b>. Each level needs a bit more XP than the last (level <i>L</i> takes <code>25 × (L − 1) × L</code> XP in total), so the first levels come in minutes and Legend V is the long game. Quests add <b id="ruleQuest">+50 XP</b> each, plus a bonus for clearing all three.</p>
           <table class="ranks" id="rankTable">
-            <thead><tr><th>Rank</th><th>From level</th><th>Total XP</th><th>≈ study time</th></tr></thead>
+            <thead><tr><th>Rank</th><th>Levels</th><th>Total XP</th><th>≈ study time</th></tr></thead>
             <tbody></tbody>
           </table>
           <p class="note">When you level up, you get a full-screen <b>LEVEL UP</b> moment. Your level also shows on your Discord card (<code>· lv 7</code>).</p>
@@ -188,7 +188,7 @@ locked in · math  ▰▰▰▰▰▱▱▱▱▱  52%
           <h2><span>11</span>Focus timer</h2>
           <ul class="bullets">
             <li>Switch the <b>Session</b> card from <b>Timer</b> to <b>Focus</b> and press <b>Start focus</b> (or <kbd>Space</kbd>).</li>
-            <li>A round is <b>25 minutes of focus</b>, then a <b>5-minute break</b>; every <b>4th</b> break is a 15-minute long one. Change the lengths, or pick Classic / Deep / Flow / Sprint, in ⚙ <b>Settings → Focus timer</b>.</li>
+            <li>A round is <b>25 minutes of focus</b>, then a <b>5-minute break</b>; every <b>4th</b> break is a 15-minute long one. Change the lengths right on the card with the <b>+ / −</b> steppers (or type a number), or tap Classic / Deep / Flow / Sprint.</li>
             <li>The ring drains as time runs out, a soft chime plays between phases, and your Discord card counts down (<code>focus 2/4 · math</code>).</li>
             <li>It runs inside the app, so it keeps going with the window closed. Each finished round is saved as a study session, so it counts for your total, XP, subjects and quests. <b>Skip</b> jumps to the next phase, and <b>Stop</b> ends the cycle (a cut-short round still counts as study time).</li>
           </ul>
@@ -198,7 +198,7 @@ locked in · math  ▰▰▰▰▰▱▱▱▱▱  52%
           <h2><span>12</span>Daily quests</h2>
           <ul class="bullets">
             <li>Every day you get <b>3 quests</b> from different categories: study time, sessions, focus rounds, variety, habits and balance.</li>
-            <li>Each one is worth <b>+30 XP</b>, and clearing all 3 adds a <b>+50 XP</b> bonus. Clear all 3 on consecutive days to build a <b>quest streak</b>, and on 5 days for the <b>Quest Master</b> badge.</li>
+            <li>Each one is worth <b>+50 XP</b>, and clearing all 3 adds a <b>+100 XP</b> bonus. Clear all 3 on consecutive days to build a <b>quest streak</b>, and on 5 days for the <b>Quest Master</b> badge.</li>
             <li>Quests are the same all day (even after a restart), and a finished quest stays finished. New ones arrive at midnight.</li>
           </ul>
         </section>
@@ -215,7 +215,7 @@ locked in · math  ▰▰▰▰▰▱▱▱▱▱  52%
           <h2><span>14</span>Themes &amp; your art</h2>
           <ul class="bullets">
             <li>⚙ <b>Settings → Appearance</b>: <b>Mode colors</b> (the default) change with what you're doing. Sakura, Ocean, Ember, Matcha and Mono keep one look, and <b>Custom</b> lets you pick both colors yourself. The background animation and these Guide pages follow along.</li>
-            <li>Upload your own <b>character art</b> (a tall image works best) and <b>logo</b> (cropped to a circle from the center). <b>Reset</b> brings back the defaults.</li>
+            <li>Upload your own <b>character art</b> (a tall image works best) and <b>logo</b> (cropped to a circle from the center). After choosing a file, a cropper opens: drag to position it, scroll or use the slider to zoom, then <b>Save</b>. <b>Reset</b> brings back the defaults.</li>
           </ul>
         </section>
       </article>

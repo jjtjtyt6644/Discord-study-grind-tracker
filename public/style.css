@@ -386,7 +386,12 @@ dialog input { width: 90px; flex: none; }
 .emblem small { font: 700 10px var(--mono); letter-spacing: .3em; color: var(--muted); }
 .emblem b { font: 700 52px/1 var(--display); color: var(--accent); text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 60%, transparent); }
 .prog-main { flex: 1; min-width: 0; }
+.rank-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .rank-name { font: italic 700 clamp(30px, 3.4vw, 44px)/1 var(--display); letter-spacing: .02em; text-transform: uppercase; }
+.divs { display: flex; gap: 4px; }
+.divs i { width: 30px; height: 22px; display: grid; place-items: center; font: 700 10px var(--mono); font-style: normal; color: var(--dim); background: var(--surface-3); clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%); }
+.divs i.done { color: var(--ink); background: color-mix(in srgb, var(--accent) 65%, transparent); }
+.divs i.now { color: var(--ink); background: var(--accent); box-shadow: 0 0 12px var(--accent); }
 .xpline { display: flex; justify-content: space-between; gap: 10px; margin: 14px 0 8px; font: 600 12px var(--mono); color: var(--muted); }
 .xpline #xpNow { color: var(--text); }
 .xpbar { position: relative; height: 10px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
@@ -712,6 +717,42 @@ body.no-art .about-art { display: none; }
 .f-actions .btn-ghost { height: 62px; flex: 1; }
 .f-hint { margin: 0; font-size: 12px; color: var(--dim); text-align: center; }
 
+/* focus lengths on the card */
+.f-lens { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+.f-len { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; padding: 9px 10px 10px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
+.f-len > span { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.f-len small { font: 500 10px var(--mono); color: var(--dim); }
+.f-len .stepper { order: 3; flex: 1 0 100%; min-width: 0; margin-top: 4px; }
+/* width 0 + flex 1: number inputs otherwise keep a ~200px default width and push the + out */
+.f-len .stepper input { flex: 1 1 0; width: 0; min-width: 0; padding: 0; }
+.stepper { display: flex; align-items: center; gap: 2px; }
+.stepper button { width: 28px; height: 30px; border: 0; border-radius: 6px; background: var(--surface-3); color: var(--text); font: 700 14px var(--display); cursor: pointer; line-height: 1; }
+.stepper button:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.stepper input { flex: none; width: 42px; height: 30px; padding: 0; border: 0; border-radius: 6px; background: none; text-align: center; color: var(--text); font: 700 15px var(--mono); appearance: textfield; -moz-appearance: textfield; }
+.stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.stepper input:focus { outline: 1px solid var(--accent); }
+.f-presets { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.f-presets button { height: 26px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--line-2); background: none; color: var(--muted); font: 600 11px var(--display); letter-spacing: .06em; cursor: pointer; }
+.f-presets button:hover { color: var(--text); border-color: var(--accent); }
+.f-presets button.on { color: var(--ink); background: var(--accent); border-color: var(--accent); }
+
+/* image cropper */
+dialog.crop-dlg { width: min(560px, calc(100vw - 24px)); padding: 24px; }
+.crop-head h3 { margin: 0; font: 700 22px var(--display); }
+.crop-head p { margin: 4px 0 16px; color: var(--muted); font-size: 13px; }
+.crop-stage { display: grid; place-items: center; padding: 14px; border-radius: 14px; background: repeating-conic-gradient(rgba(255,255,255,.04) 0 25%, transparent 0 50%) 0 0 / 20px 20px; }
+.crop-view { position: relative; height: min(56vh, 440px); max-width: 100%; overflow: hidden; border-radius: 10px; background: #000; touch-action: none; cursor: grab; box-shadow: 0 0 0 2px var(--accent); }
+.crop-view.dragging { cursor: grabbing; }
+.crop-view img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; user-select: none; pointer-events: none; }
+/* rule-of-thirds guides, and a circle mask for the logo */
+.crop-view::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .35;
+  background: linear-gradient(90deg, transparent calc(33.33% - .5px), #fff calc(33.33% - .5px) calc(33.33% + .5px), transparent 0, transparent calc(66.66% - .5px), #fff 0 calc(66.66% + .5px), transparent 0),
+              linear-gradient(transparent calc(33.33% - .5px), #fff calc(33.33% - .5px) calc(33.33% + .5px), transparent 0, transparent calc(66.66% - .5px), #fff 0 calc(66.66% + .5px), transparent 0); }
+.crop-view.round { height: min(50vh, 340px); border-radius: 12px; }
+.crop-view.round::after { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: 50%; box-shadow: 0 0 0 9999px rgba(5, 6, 12, .6); outline: 2px solid var(--accent); }
+.crop-zoom { display: flex; align-items: center; gap: 12px; margin: 16px 0 4px; color: var(--muted); font: 700 16px var(--display); }
+.crop-zoom input { flex: 1; accent-color: var(--accent); }
+
 /* ============ daily quests ============ */
 .q-streak { margin-left: auto; font: 700 11px var(--mono); letter-spacing: .06em; color: var(--accent2); text-transform: none; }
 .quests { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
@@ -842,7 +883,9 @@ dialog.settings-dlg[open] { display: block; animation: pop .28s cubic-bezier(.3,
 .set-card.rows.off { opacity: .45; pointer-events: none; filter: grayscale(.5); }
 .switch-row.static { cursor: default; }
 .sel { height: 34px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--line-2); background: rgba(0,0,0,.35); color: var(--text); font: 600 13px var(--display); color-scheme: dark; }
-.nudge-ctl { display: flex !important; align-items: center; gap: 12px; flex-direction: row !important; }
+.nudge-ctl { display: flex !important; align-items: center; gap: 12px; flex-direction: row !important; flex: none; }
+.nudge-ctl input[type="time"] { width: 150px; padding: 0 10px; font: 600 13px var(--mono); }
+.nudge-ctl input[type="time"]:disabled { opacity: .4; }
 .set-card.danger.soft { border-color: var(--line); }
 .privacy-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; align-items: start; }
 .pv-preview { position: sticky; top: 0; display: grid; gap: 10px; }
@@ -893,13 +936,13 @@ dialog.settings-dlg[open] { display: block; animation: pop .28s cubic-bezier(.3,
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 14px 0 4px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); cursor: pointer; }
 .switch-row span { display: grid; gap: 2px; font-weight: 500; }
 .switch-row small { color: var(--muted); font-size: 12px; font-weight: 400; }
-.switch-row input {
+.switch-row input[type="checkbox"] {
   appearance: none; flex: none; width: 40px; height: 22px; border-radius: 99px; cursor: pointer; position: relative;
   background: var(--surface-3); border: 1px solid var(--line-2); transition: background .2s;
 }
-.switch-row input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .2s, background .2s; }
-.switch-row input:checked { background: var(--accent); border-color: var(--accent); }
-.switch-row input:checked::after { transform: translateX(18px); background: var(--ink); }
+.switch-row input[type="checkbox"]::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .2s, background .2s; }
+.switch-row input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.switch-row input[type="checkbox"]:checked::after { transform: translateX(18px); background: var(--ink); }
 .app-meta { word-break: break-all; }
 .quit-btn { margin-right: auto; }
 .quit-btn:hover { border-color: var(--warn); color: var(--warn); }

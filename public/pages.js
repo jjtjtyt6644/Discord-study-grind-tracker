@@ -41,13 +41,15 @@
 
   $("ruleMin").textContent = `${p.rules.xpPerMinute} XP`;
   $("ruleGoal").textContent = `${p.rules.xpPerGoalDay} XP`;
+  $("ruleQuest").textContent = `+${p.rules.xpPerQuest} XP`;
   $("rankTable").tBodies[0].replaceChildren(
     ...p.rules.ranks.map((r) => {
-      const tr = el("tr", r.name === p.rank ? "current" : "");
+      const tr = el("tr", r.name === p.tier ? "current" : "");
       const name = el("td");
       name.append(el("b", null, r.name));
-      if (r.name === p.rank) name.append(el("em", null, "you are here"));
-      tr.append(name, el("td", null, `Lv ${r.level}`), el("td", null, r.xp.toLocaleString()), el("td", null, r.xp ? `~${Math.round(r.xp / 60)}h` : "-"));
+      if (r.name === p.tier) name.append(el("em", null, `you: ${p.rank}`));
+      const hours = r.xp / p.rules.xpPerMinute / 60; // study time alone, before goal and quest bonuses
+      tr.append(name, el("td", null, `${r.level}-${r.toLevel}`), el("td", null, r.xp.toLocaleString()), el("td", null, r.xp ? (hours < 1 ? `~${Math.round(hours * 60)} min` : `~${Math.round(hours)}h`) : "-"));
       return tr;
     })
   );

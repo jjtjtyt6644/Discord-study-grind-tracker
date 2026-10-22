@@ -112,7 +112,35 @@
             <button type="button" class="btn-ghost" id="fSkip" hidden>Skip</button>
             <button type="button" class="btn-ghost" id="fStop" hidden>Stop</button>
           </div>
-          <p class="f-hint" id="fHint">25 min focus · 5 min breaks · long break every 4. Change in ⚙ Settings → Focus timer.</p>
+          <div class="f-lens" id="fLens">
+            <div class="f-len" data-k="focus">
+              <span>Focus</span>
+              <div class="stepper"><button type="button" data-d="-1" aria-label="Less">−</button><input type="number" id="fl-focus" min="1" aria-label="Focus"><button type="button" data-d="1" aria-label="More">+</button></div>
+              <small>min</small>
+            </div>
+            <div class="f-len" data-k="short">
+              <span>Break</span>
+              <div class="stepper"><button type="button" data-d="-1" aria-label="Less">−</button><input type="number" id="fl-short" min="1" aria-label="Break"><button type="button" data-d="1" aria-label="More">+</button></div>
+              <small>min</small>
+            </div>
+            <div class="f-len" data-k="long">
+              <span>Long break</span>
+              <div class="stepper"><button type="button" data-d="-1" aria-label="Less">−</button><input type="number" id="fl-long" min="1" aria-label="Long break"><button type="button" data-d="1" aria-label="More">+</button></div>
+              <small>min</small>
+            </div>
+            <div class="f-len" data-k="every">
+              <span>Long every</span>
+              <div class="stepper"><button type="button" data-d="-1" aria-label="Less">−</button><input type="number" id="fl-every" min="1" aria-label="Long every"><button type="button" data-d="1" aria-label="More">+</button></div>
+              <small>rounds</small>
+            </div>
+          </div>
+          <div class="f-presets" id="fPresets">
+            <button type="button" data-p="25,5,15,4">Classic</button>
+            <button type="button" data-p="50,10,20,3">Deep</button>
+            <button type="button" data-p="90,15,30,2">Flow</button>
+            <button type="button" data-p="15,3,10,4">Sprint</button>
+          </div>
+          <p class="f-hint" id="fHint"></p>
         </div>
 
         <form class="add" id="addForm">
@@ -170,11 +198,11 @@
         <div class="prog">
           <div class="emblem"><small>LEVEL</small><b id="lvlNum">0</b></div>
           <div class="prog-main">
-            <div class="rank-name" id="rankName">Rookie</div>
+            <div class="rank-row"><div class="rank-name" id="rankName">Rookie I</div><div class="divs" id="rankDivs" title="Division"></div></div>
             <div class="xpline"><span id="xpNow">0 XP</span><span id="xpNext"></span></div>
             <div class="xpbar"><i id="xpFill"></i></div>
             <div class="next-rank" id="nextRank"></div>
-            <p class="xp-rule">1 XP per minute studied · +60 XP every day you hit your goal · <a href="guide.html#xp">how ranks work →</a></p>
+            <p class="xp-rule"><span id="xpRule"></span> · <a href="guide.html#xp">how ranks work →</a></p>
           </div>
         </div>
         <div class="badge-head">
@@ -641,6 +669,23 @@
   <div class="quit-screen" id="quitScreen" hidden>
     <div><b>Grind Tracker is closed</b><p>Your progress is saved. Open GrindTracker.exe again any time. You can close this tab.</p></div>
   </div>
+
+  <!-- image cropper (Settings → Appearance) -->
+  <dialog id="cropDlg" class="crop-dlg" aria-labelledby="cropTitle">
+    <div class="crop-head">
+      <h3 id="cropTitle">Crop</h3>
+      <p id="cropHint">Drag to move · scroll or use the slider to zoom</p>
+    </div>
+    <div class="crop-stage">
+      <div class="crop-view" id="cropView"><img id="cropImg" alt="" draggable="false"></div>
+    </div>
+    <label class="crop-zoom"><span>−</span><input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom"><span>+</span></label>
+    <div class="dialog-actions">
+      <button type="button" class="btn-ghost" id="cropCancel">Cancel</button>
+      <button type="button" class="btn-ghost" id="cropReset">Reset</button>
+      <button type="button" class="btn-solid" id="cropSave">Save</button>
+    </div>
+  </dialog>
 
   <div class="bpop" id="bpop" role="dialog" aria-label="Badge details" hidden></div>
   <div class="toast" id="toast" role="status"></div>
