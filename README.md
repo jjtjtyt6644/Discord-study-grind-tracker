@@ -17,10 +17,10 @@ locked in · math  ▰▰▰▰▰▱▱▱▱▱  52%
 - **Study timer**: start/stop with one click or the <kbd>Space</kbd> key. You can also add minutes you forgot to track.
 - **Played today**: pulled from Steam automatically, including the game you're in right now.
 - **Steam stats**: profile, level, current game, recently played, games owned and lifetime hours.
-- **Steam achievements**: completion for your current game, your **rarest unlock** (with the % of all players who have it), your latest unlocks, and the **easiest achievements to get next**.
+- **Steam achievements**: pick any recently played game (defaults to your current/last one). See completion, your **rarest unlock** (with the % of all players who have it), your latest unlocks, and the **easiest achievements to get next**.
 - **Discord Rich Presence**: your profile updates every 15 seconds with study time, play time and a goal progress bar.
 - **XP, levels & ranks**: earn 1 XP per minute studied, plus a bonus every day you hit your goal. Rank up from Rookie → Apprentice → Scholar → Strategist → Sage → Mastermind → Legend, with a full-screen LEVEL UP animation. Your level shows on your Discord card.
-- **18 badges** across Start, Streak, Focus, Habit, Goal, Balance, Subject and Total. Each one shows what it's for and how close you are. Filter by unlocked or locked. Your past history counts too.
+- **18 badges** across Start, Streak, Focus, Habit, Goal, Balance, Subject and Total. Compact tiles: click one to see what it's for and how close you are. Filter by unlocked or locked. Your past history counts too.
 - **Subjects**: tag sessions as Math, Coding or your own subjects. Pick one from the chips above the timer, from the Subjects card, or with keys <kbd>1</kbd>–<kbd>9</kbd>. See a breakdown for today and the week. Switching subjects mid-session splits the time correctly. Your current subject shows on Discord (`locked in · math`).
 - **Year heatmap**: a GitHub-style grid of every day you studied this year, with totals, active days and your best day.
 - **Today's log**: every session and added block of time, with delete (fix a timer left running) and a **CSV export** of your full history.
@@ -158,6 +158,14 @@ Your profile card follows the mode, e.g. `in elden ring  ▰▰▰▱▱▱▱�
 **The dashboard says "Demo mode"**
 
 Click the banner and finish the **Connect your accounts** steps. If you edited `.env` by hand instead, restart the app (<kbd>Ctrl</kbd>+<kbd>C</kbd>, then `npm start`), because `.env` is only read at startup.
+
+**Achievements say "Your achievements are hidden"**
+
+Steam only shares achievements when your profile's **Game details** are **Public**. Your own play time still works without that, because Steam always shows your library to your own key. Change it in [Steam privacy settings](https://steamcommunity.com/my/edit/settings), wait a few minutes, and the card fills in on its own. Use the menu in the card's corner to view any recently played game.
+
+**Today's total looks way too high**
+
+Open **Today's log** and delete the wrong entry with **×** → **Delete?**. Time added before the log existed shows up as **"+ added earlier"** and can be deleted the same way. Added time can't push a single day past 24 hours.
 
 **"Steam rejected the API key"**
 

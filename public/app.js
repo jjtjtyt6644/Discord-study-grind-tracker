@@ -145,7 +145,7 @@ function render() {
   $("studyBtnText").textContent = study.activeSince ? "End session" : "Start studying";
 
   renderSteam(steam);
-  renderAchievements(steam?.achievements);
+  renderAchievements();
   if (JSON.stringify(steam?.recent) !== renderGames.last) renderGames(steam?.recent ?? []);
   renderWeek(study.week, study.goalMinutes);
   renderDiscord(discord);
@@ -227,12 +227,85 @@ function achRow(x, note) {
   return row;
 }
 
-function renderAchievements(a) {
+// "auto" follows your current / last played game; picking a game pins the card to it
+let achPick = "auto";
+let achPicked = null; // { appid, at, data }
+
+async function loadPickedAchievements() {
+  if (achPick === "auto") return;
+  const g = stats.steam?.recent.find((x) => String(x.appid) === achPick);
+  try {
+    const data = await api(`/api/achievements?appid=${achPick}&name=${encodeURIComponent(g?.name ?? "")}`);
+    achPicked = { appid: achPick, at: Date.now(), data };
+  } catch (err) {
+    achPicked = { appid: achPick, at: Date.now(), data: { error: "failed", message: err.message } };
+  }
+  renderAchievements();
+}
+
+$("achPick").addEventListener("change", (e) => {
+  achPick = e.target.value;
+  achPicked = null;
+  if (achPick === "auto") renderAchievements();
+  else {
+    $("achBody").replaceChildren(el("p", "muted", "Loading achievements…"));
+    $("achBody").dataset.sig = "";
+    loadPickedAchievements();
+  }
+});
+
+function renderAchPicker() {
+  const pick = $("achPick");
+  const games = stats.steam?.recent ?? [];
+  const sig = JSON.stringify(games.map((g) => g.appid));
+  pick.hidden = games.length < 2;
+  if (pick.dataset.sig === sig) return;
+  pick.dataset.sig = sig;
+  const auto = el("option", null, "Current / last game");
+  auto.value = "auto";
+  pick.replaceChildren(
+    auto,
+    ...games.map((g) => {
+      const o = el("option", null, g.name);
+      o.value = String(g.appid);
+      return o;
+    })
+  );
+  pick.value = games.some((g) => String(g.appid) === achPick) ? achPick : "auto";
+}
+
+function achProblem(a) {
+  const box = el("div", "ach-empty");
+  if (a.error === "private") {
+    box.classList.add("private");
+    const steps = el("ol");
+    for (const t of ["Open your Steam privacy settings", "Set Game details to Public", "Wait a few minutes; this card updates on its own"]) steps.append(el("li", null, t));
+    const link = el("a", "cta-link small-cta", "Open Steam privacy settings ↗");
+    link.href = "https://steamcommunity.com/my/edit/settings";
+    link.target = "_blank";
+    link.rel = "noopener";
+    const lock = el("div", "lock");
+    lock.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+    box.append(lock, el("b", null, "Your achievements are hidden"), el("p", null, `Steam only shares achievements${a.game ? ` for ${a.game}` : ""} when your profile's Game details are Public.`), steps, link);
+  } else if (a.error === "none") {
+    box.append(el("b", null, `${a.game ?? "This game"} has no Steam achievements`), el("p", null, "Pick another game from the menu above."));
+  } else {
+    box.append(el("b", null, "Couldn't load achievements"), el("p", null, a.message ?? "Steam didn't answer. It'll retry on its own."));
+  }
+  return box;
+}
+
+function renderAchievements() {
+  renderAchPicker();
+  if (achPick !== "auto" && achPicked && Date.now() - achPicked.at > 60_000) loadPickedAchievements();
+  const a = achPick === "auto" ? stats.steam?.achievements : achPicked?.data;
+  if (achPick !== "auto" && !achPicked) return;
   const body = $("achBody");
   const sig = JSON.stringify(a);
   if (body.dataset.sig === sig) return;
   body.dataset.sig = sig;
-  if (!a) return body.replaceChildren(el("p", "muted", "No achievement data for this game."));
+  if (!a) return body.replaceChildren(el("p", "muted", stats.steam ? "Play a game on Steam and its achievements show up here." : "Connect Steam to see your achievements."));
+  if (a.error) return body.replaceChildren(achProblem(a));
 
   const count = el("div", "count");
   count.append(document.createTextNode(`${a.unlocked}`), el("small", null, ` / ${a.total}`));
@@ -517,22 +590,73 @@ function renderBadges(fresh = []) {
   if (!shown.length) return box.replaceChildren(el("p", "muted", badgeFilter === "unlocked" ? "No badges yet. Start a session to earn your first one!" : "You've unlocked every badge. Legend."));
   box.replaceChildren(
     ...shown.map((b) => {
-      const card = el("div", "badge" + (b.unlocked ? " on" : "") + (fresh.includes(b.id) ? " fresh" : ""));
-      const top = el("div", "btop");
-      top.append(el("div", "hex", b.icon), el("span", "bcat", b.cat));
-      const status = b.unlocked ? el("small", "bstat", "✓ unlocked") : el("small", "bstat", b.need > 1 ? `${fmtNeed(b, b.have)} / ${fmtNeed(b, b.need)}` : "locked");
-      card.append(top, el("b", null, b.name), el("p", "bdesc", b.desc), status);
-      if (!b.unlocked && b.need > 1) {
+      // compact tile; the description lives in a popup so the grid stays tight
+      const tile = el("button", "badge" + (b.unlocked ? " on" : "") + (fresh.includes(b.id) ? " fresh" : ""));
+      tile.type = "button";
+      tile.setAttribute("aria-label", `${b.name}: ${b.unlocked ? "unlocked" : "locked"}. Show details`);
+      tile.append(el("div", "hex", b.icon), el("b", null, b.name));
+      if (b.unlocked) tile.append(el("span", "bcheck", "✓"));
+      else if (b.need > 1) {
         const bar = el("div", "mini");
         const fill = el("i");
         fill.style.width = `${(b.have / b.need) * 100}%`;
         bar.append(fill);
-        card.append(bar);
+        tile.append(bar);
       }
-      return card;
+      tile.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openBadgePop(b, tile);
+      });
+      return tile;
     })
   );
 }
+
+function openBadgePop(b, anchor) {
+  const pop = $("bpop");
+  if (!pop.hidden && pop.dataset.id === b.id) return closeBadgePop();
+  pop.dataset.id = b.id;
+  pop.className = "bpop" + (b.unlocked ? " on" : "");
+  const head = el("div", "bp-head");
+  const titles = el("div");
+  titles.append(el("span", "bcat", b.cat), el("b", null, b.name));
+  head.append(el("div", "hex", b.icon), titles);
+  const status = el("div", "bp-status");
+  if (b.unlocked) status.append(el("span", "ok", "✓ Unlocked"));
+  else {
+    const bar = el("div", "xpbar");
+    const fill = el("i");
+    fill.style.width = `${(b.have / b.need) * 100}%`;
+    bar.append(fill);
+    status.append(el("span", null, b.need > 1 ? `Progress: ${fmtNeed(b, b.have)} / ${fmtNeed(b, b.need)}` : "Not unlocked yet"), bar);
+  }
+  pop.replaceChildren(head, el("p", null, b.desc), status);
+  pop.hidden = false;
+
+  // place above the tile (or below if there's no room), kept inside the viewport
+  const r = anchor.getBoundingClientRect();
+  const w = pop.offsetWidth;
+  const h = pop.offsetHeight;
+  const left = Math.min(innerWidth - w - 12, Math.max(12, r.left + r.width / 2 - w / 2));
+  const above = r.top - h - 12 > 8;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${above ? r.top - h - 12 : r.bottom + 12}px`;
+  pop.style.setProperty("--arrow", `${r.left + r.width / 2 - left}px`);
+  pop.classList.toggle("below", !above);
+  anchor.setAttribute("aria-expanded", "true");
+  closeBadgePop.anchor = anchor;
+}
+
+function closeBadgePop() {
+  const pop = $("bpop");
+  pop.hidden = true;
+  pop.dataset.id = "";
+  closeBadgePop.anchor?.setAttribute("aria-expanded", "false");
+}
+document.addEventListener("click", (e) => !e.target.closest("#bpop") && closeBadgePop());
+addEventListener("scroll", closeBadgePop, { passive: true });
+addEventListener("resize", closeBadgePop);
+addEventListener("keydown", (e) => e.key === "Escape" && closeBadgePop());
 
 document.querySelectorAll("#badgeTabs button").forEach((b) =>
   b.addEventListener("click", () => {
@@ -702,7 +826,7 @@ function renderLog() {
   list.replaceChildren(
     ...log.map((x) => {
       const li = el("li", `lrow ${x.kind}`);
-      const when = x.kind === "added" ? `+ added at ${clock(x.at)}` : `${clock(x.at)} – ${x.kind === "live" ? "now" : clock(x.end)}`;
+      const when = x.kind === "added" ? `+ added at ${clock(x.at)}` : x.kind === "legacy" ? "+ added earlier" : `${clock(x.at)} – ${x.kind === "live" ? "now" : clock(x.end)}`;
       const tag = el("span", "ltag", x.subject ?? "untagged");
       if (x.subject) tag.style.setProperty("--c", colorFor(x.subject));
       const dur = el("span", "ldur", x.kind === "live" ? "live" : hm(x.minutes).replace(/^0h /, ""));

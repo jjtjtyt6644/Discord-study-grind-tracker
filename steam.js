@@ -10,12 +10,28 @@ async function call(iface, method, version, params) {
   const url = new URL(`${API}/${iface}/${method}/${version}/`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (res.status === 401 || res.status === 403) throw new Error("Steam rejected the API key - double-check it");
-  if (!res.ok) throw new Error(`Steam ${method} failed (${res.status})`);
+  if (!res.ok) {
+    // stats endpoints explain themselves (e.g. "Profile is not public"); keep that instead of guessing
+    const reason = await res.json().then((j) => j?.playerstats?.error).catch(() => null);
+    const err = new Error(reason || (res.status === 401 || res.status === 403 ? "Steam rejected the API key - double-check it" : `Steam ${method} failed (${res.status})`));
+    err.steamReason = reason;
+    throw err;
+  }
   return res.json();
 }
 
 export const clearSteamCache = () => (cache = { at: 0, value: null });
+
+// for the achievements card's game picker
+const pickCache = new Map();
+export async function getAchievementsFor({ key, steamid }, appid, gameName) {
+  if (!key || !steamid) return demoSteam().achievements;
+  const hit = pickCache.get(appid);
+  if (hit && Date.now() - hit.at < 60_000) return hit.value;
+  const value = await getAchievements(key, steamid, appid, gameName);
+  pickCache.set(appid, { at: Date.now(), value });
+  return value;
+}
 
 // Accepts a SteamID64, a /profiles/ link, a /id/ custom link, or a bare custom name.
 export async function resolveSteamId(input, key) {
@@ -37,11 +53,18 @@ export async function verifySteam(key, steamid) {
   return p.personaname;
 }
 
-async function getAchievements(key, steamid, appid) {
-  // Games without achievements answer 400, which the caller turns into null.
-  const r = await call("ISteamUserStats", "GetPlayerAchievements", "v1", { key, steamid, appid, l: "english" });
+// Never throws: problems come back as { error: "private" | "none" | "failed" } so the card can explain them.
+async function getAchievements(key, steamid, appid, gameName) {
+  let r;
+  try {
+    r = await call("ISteamUserStats", "GetPlayerAchievements", "v1", { key, steamid, appid, l: "english" });
+  } catch (e) {
+    const reason = e.steamReason ?? "";
+    const error = /not public/i.test(reason) ? "private" : /no stats|no achievements/i.test(reason) ? "none" : "failed";
+    return { appid, game: gameName, error, message: reason || e.message };
+  }
   const list = r.playerstats?.achievements;
-  if (!list?.length) return null;
+  if (!list?.length) return { appid, game: r.playerstats?.gameName ?? gameName, error: "none" };
 
   if (!schemaCache.has(appid)) {
     const s = await call("ISteamUserStats", "GetSchemaForGame", "v2", { key, appid, l: "english" }).catch(() => null);
@@ -117,8 +140,13 @@ export async function getSteam({ key, steamid }) {
     header: header(g.appid),
   }));
 
-  const achApp = currentGame?.appid ?? recentGames[0]?.appid;
-  const achievements = achApp ? await getAchievements(key, steamid, achApp).catch(() => null) : null;
+  // current game first, then recent ones, skipping games that have no achievements at all
+  const candidates = [...new Map([currentGame, ...recentGames].filter(Boolean).map((g) => [g.appid, g])).values()];
+  let achievements = null;
+  for (const g of candidates.slice(0, 4)) {
+    achievements = await getAchievements(key, steamid, g.appid, g.name);
+    if (achievements.error !== "none") break;
+  }
 
   const value = {
     demo: false,

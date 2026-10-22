@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getSteam, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
+import { getSteam, getAchievementsFor, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
 import { startPresence, updatePresence, presenceState, buildActivity } from "./presence.js";
 import { computeProgress } from "./progress.js";
 
@@ -89,6 +89,9 @@ function todayLog() {
     ...d.sessions.map((s) => ({ kind: "session", at: s.start, end: s.end, minutes: Math.round((s.end - s.start) / 60_000), subject: s.subject ?? null })),
     ...(d.manualEntries ?? []).map((e) => ({ kind: "added", at: e.at, minutes: e.minutes, subject: e.subject ?? null })),
   ];
+  // time added before the log existed has no entries; show it as one row so it can still be removed
+  const legacy = (d.manualMinutes ?? 0) - (d.manualEntries ?? []).reduce((sum, e) => sum + e.minutes, 0);
+  if (legacy > 0) log.push({ kind: "legacy", at: new Date(`${dayKey()}T00:00`).getTime(), minutes: legacy, subject: null });
   if (data.activeStudy && dayKey(new Date(data.activeStudy)) === dayKey()) {
     log.push({ kind: "live", at: data.activeStudy, minutes: Math.round((Date.now() - data.activeStudy) / 60_000), subject: data.activeSubject });
   }
@@ -360,6 +363,7 @@ const routes = {
     const subject = checkSubject(body.subject ?? data.activeSubject);
     const d = day();
     const m = Math.round(minutes);
+    if (studyMin(dayKey()) + m > 1440) throw new Error(`That would put today over 24 hours (you're at ${Math.floor(studyMin(dayKey()) / 60)}h already)`);
     d.manualMinutes += m;
     if (subject) {
       d.manualBySubject ??= {};
@@ -387,7 +391,13 @@ const routes = {
         d.manualBySubject[e.subject] = Math.max(0, d.manualBySubject[e.subject] - e.minutes);
         if (!d.manualBySubject[e.subject]) delete d.manualBySubject[e.subject];
       }
-    } else throw new Error("kind must be session or added");
+    } else if (body.kind === "legacy") {
+      // keep only the time that has log entries
+      const entries = d.manualEntries ?? [];
+      d.manualMinutes = entries.reduce((sum, e) => sum + e.minutes, 0);
+      d.manualBySubject = {};
+      for (const e of entries) if (e.subject) d.manualBySubject[e.subject] = (d.manualBySubject[e.subject] ?? 0) + e.minutes;
+    } else throw new Error("kind must be session, added or legacy");
     save();
   },
   "POST /api/subjects": async (body) => {
@@ -435,6 +445,12 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const route = routes[`${req.method} ${url.pathname}`];
   if (url.pathname.startsWith("/api/") && !isLocalRequest(req)) return json(res, 403, { error: "local requests only" });
+  if (req.method === "GET" && url.pathname === "/api/achievements") {
+    const appid = Number(url.searchParams.get("appid"));
+    if (!Number.isInteger(appid) || appid <= 0) return json(res, 400, { error: "appid required" });
+    const name = url.searchParams.get("name")?.slice(0, 120) ?? null;
+    return json(res, 200, await getAchievementsFor({ key: process.env.STEAM_API_KEY, steamid: process.env.STEAM_ID64 }, appid, name));
+  }
   if (req.method === "GET" && url.pathname === "/api/export.csv") {
     res.writeHead(200, { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="grind-tracker-${dayKey()}.csv"` });
     return res.end("﻿" + exportCsv()); // BOM so Excel reads the UTF-8 correctly

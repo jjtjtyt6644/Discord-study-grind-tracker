@@ -479,15 +479,58 @@ kbd {
 .badge-count { font: 500 13px var(--display); color: var(--muted); }
 .badge-count b { color: var(--accent); font-size: 16px; }
 .badge-head .tabs, .c-subjects h2 .tabs { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-2); }
-.badges { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-.badge { justify-items: start; text-align: left; gap: 6px; padding: 16px; align-content: start; }
-.badge .btop { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; margin-bottom: 4px; }
-.badge .bcat { font: 600 9px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--dim); padding: 3px 7px; border-radius: 99px; border: 1px solid var(--line); }
-.badge .bdesc { margin: 0; font-size: 12px; line-height: 1.45; color: var(--dim); min-height: 2.9em; }
-.badge.on .bdesc { color: var(--muted); }
-.badge .bstat { margin-top: auto; font: 600 11px var(--mono); }
-.badge .mini { width: 100%; margin-top: 2px; }
-.badge.on .bcat { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+/* compact tiles - details open in .bpop on click */
+.badges { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+button.badge { font: inherit; color: inherit; cursor: pointer; width: 100%; }
+.badge { position: relative; padding: 14px 8px 12px; gap: 7px; justify-items: center; text-align: center; }
+.badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.badge[aria-expanded="true"] { border-color: var(--accent); }
+.badge b { font: 600 12px/1.2 var(--display); }
+.badge .hex { width: 40px; height: 46px; font-size: 14px; }
+.badge .mini { width: 64%; }
+.bcheck {
+  position: absolute; top: 6px; right: 6px; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 9px var(--mono); color: var(--ink); background: var(--good);
+}
+
+.bpop {
+  position: fixed; z-index: 15; width: min(300px, calc(100vw - 24px)); padding: 16px 18px; border-radius: 14px;
+  background: #0f1020; border: 1px solid var(--line-2); box-shadow: 0 24px 60px -20px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.02);
+  animation: pop .22s cubic-bezier(.3,1.4,.5,1);
+}
+.bpop.on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.bpop::after {
+  content: ""; position: absolute; left: calc(var(--arrow, 50%) - 7px); bottom: -7px; width: 12px; height: 12px;
+  background: inherit; border: inherit; border-top: 0; border-left: 0; transform: rotate(45deg);
+}
+.bpop.below::after { bottom: auto; top: -7px; transform: rotate(-135deg); }
+.bp-head { display: flex; align-items: center; gap: 12px; }
+.bp-head .hex {
+  width: 44px; height: 50px; flex: none; display: grid; place-items: center; font: 700 15px var(--display);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: var(--surface-3); color: var(--dim);
+}
+.bpop.on .bp-head .hex { color: var(--ink); background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 75%, #fff), var(--accent)); box-shadow: 0 0 18px var(--accent); }
+.bp-head b { display: block; font: 700 17px var(--display); margin-top: 4px; }
+.bpop .bcat { font: 600 9px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--accent); }
+.bpop p { margin: 12px 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.bp-status { display: grid; gap: 8px; font: 600 12px var(--mono); color: var(--muted); }
+.bp-status .ok { color: var(--good); }
+.bp-status .xpbar { height: 6px; }
+
+/* achievements: game picker + empty/private states */
+.ach-pick {
+  margin-left: auto; max-width: 52%; height: 28px; padding: 0 28px 0 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line-2); color: var(--text); font: 600 12px var(--display); letter-spacing: .02em; text-transform: none;
+  appearance: none; background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238d92ab' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+  text-overflow: ellipsis;
+}
+.ach-pick option { background: #0f1020; }
+.ach-empty { display: grid; justify-items: start; gap: 8px; padding: 6px 0; }
+.ach-empty b { font: 600 17px var(--display); }
+.ach-empty p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.ach-empty ol { margin: 4px 0 6px; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.8; }
+.ach-empty .lock { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #ffb454; background: rgba(255, 180, 84, .12); border: 1px solid rgba(255, 180, 84, .35); }
+.small-cta { height: 40px; padding: 0 16px; font-size: 12px; }
 
 /* ============ subjects: pickable rows ============ */
 .legend li.pick { cursor: pointer; border: 1px solid transparent; transition: background .2s, border-color .2s; }
@@ -514,6 +557,7 @@ kbd {
 .ldel { height: 26px; min-width: 26px; padding: 0 6px; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--dim); cursor: pointer; font: 600 12px var(--display); }
 .ldel:hover { color: var(--warn); border-color: var(--line-2); }
 .ldel.armed { color: var(--ink); background: var(--warn); border-color: var(--warn); }
+.lrow.legacy { border-style: dashed; border-color: var(--line-2); }
 .log .empty { padding: 10px 4px; color: var(--muted); font-size: 13px; list-style: none; }
 
 /* ============ steam achievements v2 ============ */

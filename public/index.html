@@ -154,7 +154,7 @@
 
       <!-- achievements -->
       <article class="card c-ach">
-        <h2><span>05</span>Achievements</h2>
+        <h2><span>05</span>Achievements <select class="ach-pick" id="achPick" aria-label="Show achievements for" hidden></select></h2>
         <div id="achBody" class="ach"><p class="muted">No achievement data yet.</p></div>
       </article>
 
@@ -314,6 +314,7 @@
     </form>
   </dialog>
 
+  <div class="bpop" id="bpop" role="dialog" aria-label="Badge details" hidden></div>
   <div class="toast" id="toast" role="status"></div>
 
   <div class="levelup" id="levelup" aria-live="polite">
