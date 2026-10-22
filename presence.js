@@ -59,7 +59,9 @@ export function updatePresence(activity) {
   // Discord rate-limits presence updates, so only send real changes.
   if (!connected || json === lastSent) return;
   lastSent = json;
-  client.user?.setActivity(activity).catch((e) => {
+  // null = the user hid their activity in Settings → Privacy
+  const req = activity ? client.user?.setActivity(activity) : client.user?.clearActivity();
+  req?.catch((e) => {
     console.error("! Discord rejected the activity:", e?.message ?? e);
     lastSent = "";
   });
@@ -78,32 +80,56 @@ const bar = (pct, cells = 10) => {
   return "▰".repeat(filled) + "▱".repeat(cells - filled);
 };
 
-export function buildActivity(stats, largeImage) {
-  const { mode, study, played, steam } = stats;
+// What the card may show (Settings → Privacy). Everything is on unless the user turns it off.
+export const PRIVACY_DEFAULTS = { show: true, studyTime: true, playTime: true, level: true, subject: true, game: true, goal: true, timer: true, image: true, button: true };
+
+export function buildActivity(stats, largeImage, privacy = {}) {
+  const p = { ...PRIVACY_DEFAULTS, ...privacy };
+  if (!p.show) return null;
+  const { mode, study, played, steam, focus } = stats;
   const game = steam?.profile.currentGame;
   const goalPct = study.todayMs / 60000 / study.goalMinutes;
-  const studying = study.subject ? `locked in · ${study.subject.toLowerCase()}` : "locked in";
-  const label = mode === "study" ? studying : mode === "gaming" ? `in ${game.name.toLowerCase()}` : "on break";
-  const level = stats.progress ? `  ·  lv ${stats.progress.level}` : "";
-  const activity = {
-    type: 0,
-    details: `${hm(study.todayMs / 60000)} studied  ·  ${hm(played.todayMinutes)} played${level}`,
-    state: `${label}  ${bar(goalPct)}  ${Math.round(goalPct * 100)}%`.slice(0, 128),
-  };
+  const subject = p.subject && study.subject ? ` · ${study.subject.toLowerCase()}` : "";
 
-  const start = mode === "study" ? study.activeSince : mode === "gaming" ? played.sessionStart : null;
-  if (start) activity.startTimestamp = start;
+  let label;
+  if (focus?.phase === "focus") label = `focus ${focus.round + 1}/${focus.every}${subject}`;
+  else if (focus?.phase === "short" || focus?.phase === "long") label = focus.phase === "long" ? "long break" : "short break";
+  else if (mode === "study") label = `locked in${subject}`;
+  else if (mode === "gaming") label = p.game ? `in ${game.name.toLowerCase()}` : "gaming";
+  else label = "on break";
 
-  const big = mode === "gaming" ? game.header : largeImage || steam?.profile.avatar;
-  if (big) {
-    activity.largeImageKey = big;
-    const rank = stats.progress ? `lv ${stats.progress.level} ${stats.progress.rank.toLowerCase()} · ` : "";
-    activity.largeImageText = `${rank}${hm(study.todayMs / 60000)} of ${hm(study.goalMinutes)} goal`;
+  const activity = { type: 0, state: (p.goal ? `${label}  ${bar(goalPct)}  ${Math.round(goalPct * 100)}%` : label).slice(0, 128) };
+  const details = [
+    p.studyTime && `${hm(study.todayMs / 60000)} studied`,
+    p.playTime && `${hm(played.todayMinutes)} played`,
+    p.level && stats.progress && `lv ${stats.progress.level}`,
+  ].filter(Boolean);
+  if (details.length) activity.details = details.join("  ·  ");
+
+  if (p.timer) {
+    // focus/break phases count down; everything else counts up
+    if (focus?.endsAt && focus.phase !== "idle" && focus.phase !== "ready") activity.endTimestamp = focus.endsAt;
+    else {
+      const start = mode === "study" ? study.activeSince : mode === "gaming" ? played.sessionStart : null;
+      if (start) activity.startTimestamp = start;
+    }
   }
-  if (mode === "gaming" && steam.profile.avatar) {
-    activity.smallImageKey = steam.profile.avatar;
-    activity.smallImageText = steam.profile.level ? `Steam level ${steam.profile.level}` : steam.profile.name;
+
+  if (p.image) {
+    const big = mode === "gaming" && p.game ? game.header : largeImage || steam?.profile.avatar;
+    if (big) {
+      activity.largeImageKey = big;
+      const hover = [
+        p.level && stats.progress && `lv ${stats.progress.level} ${stats.progress.rank.toLowerCase()}`,
+        p.goal && `${p.studyTime ? `${hm(study.todayMs / 60000)} of ` : ""}${hm(study.goalMinutes)} goal`,
+      ].filter(Boolean);
+      activity.largeImageText = hover.join(" · ") || "grind tracker";
+    }
+    if (mode === "gaming" && p.game && steam.profile.avatar) {
+      activity.smallImageKey = steam.profile.avatar;
+      activity.smallImageText = steam.profile.level ? `Steam level ${steam.profile.level}` : steam.profile.name;
+    }
   }
-  if (steam?.profile.url) activity.buttons = [{ label: "My Steam profile", url: steam.profile.url }];
+  if (p.button && steam?.profile.url) activity.buttons = [{ label: "My Steam profile", url: steam.profile.url }];
   return activity;
 }

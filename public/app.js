@@ -156,6 +156,10 @@ function render() {
   renderHeatmap();
   renderMarquee();
   renderUpdate();
+  renderFocus();
+  renderQuests();
+  applyTheme(stats.prefs?.theme);
+  showInbox();
   if (settingsDlg.open) renderSettings();
   maybeOpenSetup();
 }
@@ -891,7 +895,9 @@ function tick() {
 
   // live timer in the browser tab, so you can see it from any other tab
   document.title = study.activeSince ? `● ${hms(nowServer - study.activeSince)} · ${study.subject ?? "studying"}` : "Grind Tracker";
-  checkLongSession(study.activeSince ? nowServer - study.activeSince : 0);
+  if (stats.focus?.phase === "idle" || !stats.focus) checkLongSession(study.activeSince ? nowServer - study.activeSince : 0);
+  tickFocus();
+  if (settingsDlg.open) renderPrivacyPreview();
 }
 
 // Run a request; if the server wants a yes first (e.g. a day over 24h), ask and retry with force.
@@ -1040,7 +1046,10 @@ addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     if (tag === "BUTTON") return; // let Space press the focused button
     e.preventDefault();
-    toggleStudy();
+    if (sessView === "focus") {
+      const ph = stats?.focus?.phase ?? "idle";
+      focusCall(ph === "idle" || ph === "ready" ? "/api/focus/start" : "/api/focus/stop");
+    } else toggleStudy();
   } else if (/^[1-9]$/.test(e.key) && stats) {
     const name = stats.subjects.list[Number(e.key) - 1];
     if (name) setSubject(name === stats.study.subject ? null : name);
@@ -1158,9 +1167,143 @@ $("setupForm").addEventListener("submit", async (e) => {
 });
 $("discordChip").addEventListener("click", openSetup);
 $("notice").addEventListener("click", openSetup);
+/* ================= focus timer ================= */
+const F_RING = 2 * Math.PI * 88;
+let sessView = (() => {
+  try {
+    return localStorage.getItem("gt-sess-view") || "timer";
+  } catch {
+    return "timer";
+  }
+})();
+let lastPhase = null;
+
+function setSessView(v) {
+  sessView = v;
+  store.set("gt-sess-view", v);
+  renderFocus();
+}
+document.querySelectorAll("#sessMode button").forEach((b) => b.addEventListener("click", () => setSessView(b.dataset.m)));
+
+function renderFocus() {
+  const f = stats.focus ?? { phase: "idle" };
+  const running = f.phase !== "idle";
+  if (running && sessView !== "focus") sessView = "focus"; // a running focus cycle always shows itself
+  const showFocus = sessView === "focus";
+  document.querySelectorAll("#sessMode button").forEach((b) => b.classList.toggle("on", b.dataset.m === sessView));
+  $("timerView").hidden = showFocus;
+  $("focusView").hidden = !showFocus;
+
+  // chime + nudge when the server moves to a new phase while the window is open
+  if (lastPhase && lastPhase !== f.phase && f.phase !== "idle") chime(f.phase === "focus" ? "up" : "down");
+  lastPhase = f.phase;
+
+  const s = f.settings ?? {};
+  $("fHint").textContent = `${s.focus ?? 25} min focus · ${s.short ?? 5} min breaks · ${s.long ?? 15} min long break every ${s.every ?? 4}. Change in ⚙ Settings → Focus timer.`;
+  $("fStart").hidden = running && f.phase !== "ready";
+  $("fStart").querySelector("span").textContent = f.phase === "ready" ? "Start next round" : "Start focus";
+  $("fSkip").hidden = !running || f.phase === "ready";
+  $("fStop").hidden = !running;
+  $("fSkip").textContent = f.phase === "focus" ? "Skip to break" : "Skip break";
+  $("focusView").dataset.phase = f.phase;
+
+  const every = f.every ?? 4;
+  const dots = $("fDots");
+  if (dots.children.length !== every) dots.replaceChildren(...Array.from({ length: every }, () => el("i")));
+  [...dots.children].forEach((d, i) => d.className = i < f.round ? "done" : i === f.round && f.phase === "focus" ? "now" : "");
+  $("fRound").textContent = running ? `round ${Math.min(f.round + (f.phase === "focus" ? 1 : 0), every) || 1} of ${every}` : `${every} rounds per cycle`;
+  tickFocus();
+}
+
+function tickFocus() {
+  const f = stats?.focus;
+  if (!f || $("focusView").hidden) return;
+  const s = f.settings ?? {};
+  const total = (f.phase === "focus" ? s.focus : f.phase === "long" ? s.long : s.short) * 60_000;
+  const left = f.endsAt ? Math.max(0, f.endsAt - (Date.now() + skew)) : (s.focus ?? 25) * 60_000;
+  const mm = Math.floor(left / 60_000);
+  const ss = Math.floor((left % 60_000) / 1000);
+  $("fTime").textContent = `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+  $("fPhase").textContent = { idle: "Ready", focus: "Focus", short: "Short break", long: "Long break", ready: "Break's over" }[f.phase];
+  // the ring drains as the phase runs out (full when idle)
+  $("fFill").style.strokeDashoffset = f.endsAt && total ? F_RING * (1 - left / total) : 0;
+  if (f.phase === "focus" || f.phase === "short" || f.phase === "long") document.title = `${$("fTime").textContent} · ${$("fPhase").textContent}`;
+}
+
+// a soft two-note chime (no audio files): up for "focus", down for "break"
+function chime(dir) {
+  try {
+    const ctx = (chime.ctx ??= new AudioContext());
+    const notes = dir === "up" ? [523.25, 783.99] : [783.99, 523.25];
+    notes.forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      const t = ctx.currentTime + i * 0.22;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+      o.connect(g).connect(ctx.destination);
+      o.start(t);
+      o.stop(t + 0.65);
+    });
+  } catch {}
+}
+
+const focusCall = (path) => api(path, {}).then(apply).catch((err) => toast(err.message, true));
+$("fStart").addEventListener("click", () => focusCall("/api/focus/start"));
+$("fSkip").addEventListener("click", () => focusCall("/api/focus/skip"));
+$("fStop").addEventListener("click", () => focusCall("/api/focus/stop"));
+
+/* ================= daily quests ================= */
+function renderQuests() {
+  const q = stats.quests;
+  if (!q) return;
+  const sig = JSON.stringify(q.list.map((x) => [x.id, x.have, x.done]));
+  const list = $("quests");
+  if (list.dataset.sig !== sig) {
+    list.dataset.sig = sig;
+    list.replaceChildren(
+      ...q.list.map((x) => {
+        const li = el("li", "quest" + (x.done ? " done" : ""));
+        const check = el("span", "q-check", x.done ? "✓" : "");
+        const body = el("div", "q-body");
+        const bar = el("div", "q-bar");
+        const fill = el("i");
+        fill.style.width = `${(x.have / x.need) * 100}%`;
+        bar.append(fill);
+        const prog = x.unit === "min" ? `${hm(x.have).replace(/^0h /, "")} / ${hm(x.need).replace(/^0h /, "").replace(/ 00m$/, "")}` : `${x.have} / ${x.need}`;
+        body.append(el("b", null, x.text), bar, el("small", null, x.done ? "Done" : prog));
+        li.append(check, body, el("span", "q-xp", `+${x.xp} XP`));
+        return li;
+      })
+    );
+  }
+  $("qStreak").textContent = q.streak ? `${q.streak}-day streak` : "";
+  $("qFoot").textContent = q.allDone ? `All 3 cleared: +${q.bonus} bonus XP. New quests at midnight.` : `Clear all 3 for +${q.bonus} bonus XP · new quests every day at midnight`;
+  $("qFoot").classList.toggle("won", q.allDone);
+}
+
+/* ================= theme ================= */
+function applyTheme(theme) {
+  window.GT_applyTheme?.(theme);
+}
+
+/* ================= notifications inbox (shown in-app when there are no Windows toasts) ================= */
+let inboxSeen = null;
+function showInbox() {
+  const box = stats.inbox ?? [];
+  const newest = box.at(-1)?.id ?? 0;
+  if (inboxSeen === null) return void (inboxSeen = newest); // don't replay old ones on load
+  if (stats.app?.desktop) return void (inboxSeen = newest); // Windows already showed them
+  for (const n of box) if (n.id > inboxSeen) toast(`${n.title} · ${n.body}`);
+  inboxSeen = newest;
+}
+
 /* ================= settings ================= */
 const settingsDlg = $("settings");
-const PANE_TITLES = { goals: "Goals", app: "App", updates: "Updates", connections: "Connections", data: "Data & backups", shortcuts: "Keyboard shortcuts" };
+const PANE_TITLES = { goals: "Goals", focus: "Focus timer", privacy: "Privacy", notify: "Notifications", appearance: "Appearance", app: "App", updates: "Updates", connections: "Connections", data: "Data & backups", shortcuts: "Keyboard shortcuts" };
 
 function showPane(name) {
   document.querySelectorAll(".set-tab").forEach((t) => {
@@ -1256,6 +1399,40 @@ function renderSettings(full = false) {
   $("connSteam").textContent = steamName ? `Connected as ${steamName}` : c.steamApiKey ? "Key saved, profile not set" : "Not connected (showing demo data)";
   $("connSteamDot").className = "dot" + (steamName ? " on" : c.steamApiKey ? " warn" : "");
 
+  // focus timer
+  const fs = stats.prefs?.focus ?? {};
+  for (const [id, k] of [["fFocusIn", "focus"], ["fShortIn", "short"], ["fLongIn", "long"], ["fEveryIn", "every"]]) if (full && document.activeElement !== $(id)) $(id).value = fs[k] ?? "";
+  $("fAutoIn").checked = fs.autoNext !== false;
+  document.querySelectorAll("#focusPresets button").forEach((b) => b.classList.toggle("on", b.dataset.p === [fs.focus, fs.short, fs.long, fs.every].join(",")));
+
+  // privacy
+  const pv = stats.prefs?.privacy ?? {};
+  for (const k of Object.keys(pv)) if ($(`pv-${k}`)) $(`pv-${k}`).checked = pv[k] !== false;
+  $("pvList").classList.toggle("off", pv.show === false);
+  renderPrivacyPreview();
+
+  // notifications
+  const nt = stats.prefs?.notify ?? {};
+  for (const k of ["on", "goal", "budget", "focus", "quests", "nudge"]) $(`nt-${k}`).checked = nt[k] !== false && (k !== "nudge" || nt.nudge === true);
+  $("ntList").classList.toggle("off", nt.on === false);
+  $("ntBreak").value = String(nt.breakAfter ?? 90);
+  if (document.activeElement !== $("ntNudgeAt")) $("ntNudgeAt").value = nt.nudgeAt ?? "19:00";
+  $("ntWhere").textContent = a.desktop ? "Sends a Windows notification right now." : "Shows a test notification inside the dashboard.";
+
+  // appearance
+  const th = stats.prefs?.theme ?? { preset: "mode" };
+  document.querySelectorAll("#themes button").forEach((b) => b.classList.toggle("on", b.dataset.t === th.preset));
+  $("customColors").hidden = th.preset !== "custom";
+  if (th.accent) $("tAccent").value = th.accent;
+  if (th.accent2) $("tAccent2").value = th.accent2;
+  $("customSwatch").style.background = `linear-gradient(135deg, ${$("tAccent").value}, ${$("tAccent2").value})`;
+  const v = stats.art?.v ?? 0;
+  if ($("artBgPrev").dataset.v !== String(v)) {
+    $("artBgPrev").dataset.v = String(v);
+    $("artBgPrev").src = `img/bg.jpg?v=${v}`;
+    $("artLogoPrev").src = `img/logo-small.png?v=${v}`;
+  }
+
   // data
   $("dataPath").textContent = a.dataDir ?? "data.json in the project folder";
   const bk = a.backups;
@@ -1323,6 +1500,134 @@ $("openSetup").addEventListener("click", () => {
   settingsDlg.close();
   openSetup();
 });
+
+// ---- focus timer settings
+for (const [id, k] of [["fFocusIn", "focus"], ["fShortIn", "short"], ["fLongIn", "long"], ["fEveryIn", "every"]]) {
+  $(id).addEventListener("change", (e) => Number(e.target.value) >= 1 && saveSetting({ focus: { [k]: Number(e.target.value) } }));
+}
+$("fAutoIn").addEventListener("change", (e) => saveSetting({ focus: { autoNext: e.target.checked } }));
+document.querySelectorAll("#focusPresets button").forEach((b) =>
+  b.addEventListener("click", () => {
+    const [focus, short, long, every] = b.dataset.p.split(",").map(Number);
+    saveSetting({ focus: { focus, short, long, every } });
+  })
+);
+
+// ---- privacy: every switch saves at once and the preview updates from the server's real card
+document.querySelectorAll('[id^="pv-"]').forEach((input) =>
+  input.addEventListener("change", () => saveSetting({ privacy: { [input.id.slice(3)]: input.checked } }))
+);
+
+function renderPrivacyPreview() {
+  const act = stats.discord?.activity;
+  $("pvHidden").hidden = Boolean(act);
+  document.querySelector(".pv-preview .dc").hidden = !act;
+  if (!act) return;
+  $("pvDetails").textContent = act.details ?? "";
+  $("pvState").textContent = act.state ?? "";
+  const now = Date.now() + skew;
+  $("pvTime").textContent = act.endTimestamp ? `${hms(act.endTimestamp - now)} left` : act.startTimestamp ? `${hms(now - act.startTimestamp)} elapsed` : "";
+  const img = $("pvImg");
+  const src = act.largeImageKey ? (act.largeImageKey.startsWith("http") ? act.largeImageKey : `img/logo-small.png?v=${stats.art?.v ?? 0}`) : "";
+  img.hidden = !src;
+  if (src && img.dataset.src !== src) {
+    img.dataset.src = src;
+    const i = el("img");
+    i.src = src;
+    i.alt = "";
+    img.replaceChildren(i);
+  }
+}
+
+// ---- notifications
+for (const k of ["on", "goal", "budget", "focus", "quests", "nudge"]) $(`nt-${k}`).addEventListener("change", (e) => saveSetting({ notify: { [k]: e.target.checked } }));
+$("ntBreak").addEventListener("change", (e) => saveSetting({ notify: { breakAfter: Number(e.target.value) } }));
+$("ntNudgeAt").addEventListener("change", (e) => e.target.value && saveSetting({ notify: { nudgeAt: e.target.value } }));
+$("ntTest").addEventListener("click", async () => {
+  try {
+    apply(await api("/api/notify/test", {}));
+    if (stats.app?.desktop) toast("Sent. Check the corner of your screen");
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+// ---- appearance
+document.querySelectorAll("#themes button").forEach((b) =>
+  b.addEventListener("click", () => {
+    const body = { preset: b.dataset.t };
+    if (b.dataset.t === "custom") Object.assign(body, { accent: $("tAccent").value, accent2: $("tAccent2").value });
+    saveSetting({ theme: body });
+  })
+);
+for (const id of ["tAccent", "tAccent2"]) {
+  $(id).addEventListener("input", () => applyTheme({ preset: "custom", accent: $("tAccent").value, accent2: $("tAccent2").value })); // live while dragging
+  $(id).addEventListener("change", () => saveSetting({ theme: { preset: "custom", accent: $("tAccent").value, accent2: $("tAccent2").value } }));
+}
+
+async function uploadArt(slot, blob) {
+  const res = await fetch(`/api/art/upload?slot=${slot}`, { method: "POST", headers: { "content-type": blob.type }, body: blob });
+  const out = await res.json();
+  if (!res.ok) throw new Error(out.error);
+}
+
+// square-crop from the center and scale, as a PNG (the logo shows as a circle everywhere)
+async function squarePng(file, size) {
+  const bmp = await createImageBitmap(file);
+  const side = Math.min(bmp.width, bmp.height);
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  c.getContext("2d").drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, size, size);
+  return new Promise((r) => c.toBlob(r, "image/png"));
+}
+
+$("artBgIn").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    await uploadArt("bg", file);
+    refreshArt();
+    toast("Character art updated");
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+$("artLogoIn").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    await uploadArt("logo", await squarePng(file, 256));
+    await uploadArt("logo-full", await squarePng(file, 1024)); // full size, for the Discord Developer Portal
+    refreshArt();
+    toast("Logo updated");
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+document.querySelectorAll("[data-reset]").forEach((b) =>
+  b.addEventListener("click", async () => {
+    try {
+      apply(await api("/api/art/reset", { slot: b.dataset.reset }));
+      refreshArt();
+      toast("Back to the default");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  })
+);
+
+// swap every art image on the page for the new version without a reload
+async function refreshArt() {
+  apply(await api("/api/stats"));
+  const v = stats.art.v;
+  $("artImg").src = `img/bg.jpg?v=${v}`;
+  document.body.classList.remove("no-art");
+  document.querySelectorAll('img[src*="logo-small.png"]').forEach((img) => (img.src = `img/logo-small.png?v=${v}`));
+  document.querySelector('link[rel="icon"]').href = `img/logo-small.png?v=${v}`;
+  renderSettings(true);
+}
 document.querySelectorAll("[data-open]").forEach((b) =>
   b.addEventListener("click", () => api("/api/open-folder", { which: b.dataset.open }).catch((err) => toast(err.message, true)))
 );

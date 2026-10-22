@@ -34,6 +34,7 @@
   }
   document.body.dataset.mode = stats.mode;
   BG.setMode(stats.mode);
+  window.GT_applyTheme(stats.prefs?.theme);
 
   const p = stats.progress;
   if (!p || !$("rankTable")) return;

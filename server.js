@@ -1,11 +1,14 @@
 import http from "node:http";
-import { readFile, writeFile, rename } from "node:fs/promises";
+import { readFile, writeFile, rename, rm } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, openAppWindow, findPortOwner, askYesNo, closeProcess, autostartSupported, getAutostart, setAutostart } from "./desktop.js";
 import { getSteam, getAchievementsFor, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
-import { startPresence, updatePresence, presenceState, buildActivity } from "./presence.js";
+import { startPresence, updatePresence, presenceState, buildActivity, PRIVACY_DEFAULTS } from "./presence.js";
+import { createFocus } from "./focus.js";
+import { questsToday, questTotals } from "./quests.js";
+import { createNotifier, startReminders, NOTIFY_DEFAULTS } from "./notify.js";
 import { computeProgress } from "./progress.js";
 import { update, checkForUpdate, checkIfStale, installLatest, restartIntoUpdate, startUpdateChecks } from "./updater.js";
 import { createStore } from "./store.js";
@@ -40,6 +43,9 @@ const DEFAULT_SUBJECTS = ["Math", "Science", "Coding", "Language", "Reading"];
 data.subjects ??= DEFAULT_SUBJECTS;
 data.activeSubject ??= null;
 data.settings.autoUpdate ??= true;
+data.settings.privacy = { ...PRIVACY_DEFAULTS, ...data.settings.privacy };
+data.settings.notify = { ...NOTIFY_DEFAULTS, ...data.settings.notify };
+data.settings.theme ??= { preset: "mode", accent: null, accent2: null };
 
 const day = (key = dayKey()) => (data.days[key] ??= { sessions: [], manualMinutes: 0, snapshot: null });
 const studyMin = (key) => studyMs(key) / 60_000;
@@ -148,9 +154,9 @@ function checkSubject(subject) {
   return subject;
 }
 
-function stopSession(at = Date.now()) {
+function stopSession(at = Date.now(), extra = {}) {
   if (!data.activeStudy) return;
-  day(dayKey(new Date(data.activeStudy))).sessions.push({ start: data.activeStudy, end: at, subject: data.activeSubject });
+  day(dayKey(new Date(data.activeStudy))).sessions.push({ start: data.activeStudy, end: at, subject: data.activeSubject, ...extra });
   data.activeStudy = null;
 }
 
@@ -275,6 +281,72 @@ async function saveConfig(body) {
 }
 
 // ---------- stats ----------
+// ---------- focus timer, quests, notifications ----------
+const NOTIFY_ICON = path.join(APP_DIR, "notify-icon.png");
+const notifier = createNotifier({
+  windowsToasts: isDesktop && process.platform === "win32",
+  iconPath: () => (hasCustomArt("logo-small.png") ? path.join(ART_DIR, "logo-small.png") : NOTIFY_ICON),
+  getSettings: () => data.settings.notify,
+});
+if (isDesktop) {
+  const icon = readAsset("public/img/logo-small.png"); // toasts need the logo as a real file
+  if (icon) writeFile(NOTIFY_ICON, icon).catch(() => {});
+}
+const notify = notifier.notify;
+
+const focus = createFocus({
+  data,
+  startStudy: () => (data.activeStudy ??= Date.now()),
+  stopStudy: (extra) => stopSession(Date.now(), extra),
+  save: () => {
+    save();
+    pushPresence();
+  },
+  notify: (title, body) => notify("focus", title, body),
+});
+
+// today's numbers, for quests and reminders
+function todayFacts() {
+  const k = dayKey();
+  const d = data.days[k] ?? { sessions: [] };
+  const finished = d.sessions.map((x) => ({ min: (x.end - x.start) / 60_000, start: x.start, subject: x.subject, focus: x.focus }));
+  const live = data.activeStudy && dayKey(new Date(data.activeStudy)) === k ? { min: (Date.now() - data.activeStudy) / 60_000, start: data.activeStudy, subject: data.activeSubject } : null;
+  const all = live ? [...finished, live] : finished;
+  const subjects = new Set([...all.map((x) => x.subject), ...Object.keys(d.manualBySubject ?? {})].filter(Boolean));
+  return {
+    day: k,
+    studyMin: studyMin(k),
+    sessions45: finished.filter((x) => x.min >= 45).length,
+    sessions25: finished.filter((x) => x.min >= 25).length,
+    longest: Math.max(0, ...all.map((x) => x.min)),
+    focusRounds: finished.filter((x) => x.focus).length,
+    subjects: subjects.size,
+    early: all.some((x) => new Date(x.start).getHours() < 10),
+    played: d.playedMinutes ?? 0,
+  };
+}
+
+function currentQuests() {
+  const q = questsToday(data, dayKey(), todayFacts());
+  if (q.fresh.length) {
+    save();
+    for (const text of q.fresh) notify("quests", "Quest complete  +30 XP", text);
+    if (q.allDone) notify("quests", "All 3 quests cleared  +50 XP", `Quest streak: ${q.streak} day${q.streak === 1 ? "" : "s"}. See you tomorrow.`);
+  }
+  return q;
+}
+
+startReminders({
+  data,
+  save,
+  notify,
+  getSettings: () => data.settings.notify,
+  facts: () => ({ ...todayFacts(), goal: data.settings.goalMinutes, budget: data.settings.playBudgetMinutes, activeSince: data.activeStudy, focusing: focus.isFocusing() }),
+});
+setInterval(currentQuests, 30_000).unref(); // quests also complete while the window is closed
+
+let artVersion = Date.now(); // bumped on upload so the dashboard reloads the images
+
 async function buildStats() {
   let steam = null;
   let steamError = null;
@@ -320,7 +392,9 @@ async function buildStats() {
       week: minutesBySubject(weekKeys),
     },
     heatmap: heatmap(),
-    progress: computeProgress(data, studyMin, dayKey),
+    quests: currentQuests(),
+    focus: focus.state(),
+    progress: computeProgress(data, studyMin, dayKey, questTotals(data)),
     played: {
       todayMinutes: playedMin,
       budgetMinutes: data.settings.playBudgetMinutes,
@@ -340,8 +414,11 @@ async function buildStats() {
       update,
       dataDir: isDesktop ? APP_DIR : null,
     },
+    prefs: { privacy: data.settings.privacy, notify: data.settings.notify, theme: data.settings.theme, focus: data.settings.focus },
+    art: { bg: hasCustomArt("bg.jpg"), logo: hasCustomArt("logo-small.png"), v: artVersion },
+    inbox: notifier.inbox(),
   };
-  const activity = buildActivity(stats, process.env.LARGE_IMAGE);
+  const activity = buildActivity(stats, process.env.LARGE_IMAGE, data.settings.privacy);
   stats.discord = { ...presenceState(), activity };
   return stats;
 }
@@ -374,6 +451,22 @@ function readBody(req) {
   });
 }
 
+function readRaw(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > limit) {
+        reject(new Error("That image is too big (15 MB max)"));
+        req.destroy();
+      } else chunks.push(c);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
 const json = (res, code, obj) => {
   res.writeHead(code, { "content-type": "application/json" });
   res.end(JSON.stringify(obj));
@@ -394,13 +487,24 @@ const routes = {
   // cheap "are you Grind Tracker?" check used to find a running copy on any port
   "GET /api/ping": async () => ({ app: "grind-tracker", version: VERSION }),
   "POST /api/study/start": async (body) => {
+    if (focus.inBreak()) focus.stop(); // starting a normal session ends a focus break
     if (body.subject !== undefined) data.activeSubject = checkSubject(body.subject);
     data.activeStudy ??= Date.now();
     save();
   },
   "POST /api/study/stop": async () => {
-    stopSession();
+    if (focus.isFocusing()) focus.stop();
+    else stopSession();
     save();
+  },
+  "POST /api/focus/start": async () => focus.start(),
+  "POST /api/focus/skip": async () => focus.skip(),
+  "POST /api/focus/stop": async () => focus.stop(),
+  "POST /api/notify/test": async () => notifier.test(),
+  "POST /api/art/reset": async (body) => {
+    const files = body.slot === "bg" ? ["bg.jpg"] : body.slot === "logo" ? ["logo-small.png", "logo.png"] : [];
+    for (const f of files) await rm(path.join(ART_DIR, f), { force: true });
+    artVersion = Date.now();
   },
   // switching mid-session closes the current piece under the old subject, so time is split correctly
   "POST /api/study/subject": async (body) => {
@@ -558,6 +662,33 @@ const routes = {
     if (body.playBudgetMinutes != null) data.settings.playBudgetMinutes = clamp(body.playBudgetMinutes, 1, MAX_MINUTES);
     if (body.closeToBackground != null) data.settings.closeToBackground = Boolean(body.closeToBackground);
     if (body.autoUpdate != null) data.settings.autoUpdate = Boolean(body.autoUpdate);
+    // only known switches get through; everything else is ignored
+    const bools = (target, src, keys) => {
+      for (const k of keys) if (typeof src?.[k] === "boolean") target[k] = src[k];
+    };
+    if (body.privacy) bools(data.settings.privacy, body.privacy, Object.keys(PRIVACY_DEFAULTS));
+    if (body.notify) {
+      bools(data.settings.notify, body.notify, ["on", "goal", "budget", "focus", "quests", "nudge"]);
+      if (body.notify.breakAfter != null) data.settings.notify.breakAfter = clamp(body.notify.breakAfter, 0, 600);
+      if (/^([01]\d|2[0-3]):[0-5]\d$/.test(body.notify.nudgeAt ?? "")) data.settings.notify.nudgeAt = body.notify.nudgeAt;
+    }
+    if (body.theme) {
+      const hex = (v) => (/^#[0-9a-f]{6}$/i.test(v ?? "") ? v : null);
+      const PRESETS = ["mode", "sakura", "ocean", "ember", "matcha", "mono", "custom"];
+      data.settings.theme = {
+        preset: PRESETS.includes(body.theme.preset) ? body.theme.preset : data.settings.theme.preset,
+        accent: hex(body.theme.accent) ?? data.settings.theme.accent,
+        accent2: hex(body.theme.accent2) ?? data.settings.theme.accent2,
+      };
+    }
+    if (body.focus) {
+      const f = data.settings.focus;
+      if (body.focus.focus != null) f.focus = clamp(body.focus.focus, 1, 240);
+      if (body.focus.short != null) f.short = clamp(body.focus.short, 1, 120);
+      if (body.focus.long != null) f.long = clamp(body.focus.long, 1, 240);
+      if (body.focus.every != null) f.every = clamp(body.focus.every, 1, 12);
+      if (typeof body.focus.autoNext === "boolean") f.autoNext = body.focus.autoNext;
+    }
     save();
   },
 };
@@ -569,7 +700,9 @@ function isLocalRequest(req) {
   if (!LOCAL_HOSTS.has(req.headers.host)) return false;
   const origin = req.headers.origin;
   if (origin && !LOCAL_HOSTS.has(origin.replace(/^http:\/\//, ""))) return false;
-  if (req.method === "POST" && !String(req.headers["content-type"]).startsWith("application/json")) return false;
+  const type = String(req.headers["content-type"]);
+  const isUpload = req.url.startsWith("/api/art/upload") && /^image\/(png|jpeg|webp|gif)$/.test(type);
+  if (req.method === "POST" && !type.startsWith("application/json") && !isUpload) return false;
   return true;
 }
 
@@ -577,6 +710,23 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const route = routes[`${req.method} ${url.pathname}`];
   if (url.pathname.startsWith("/api/") && !isLocalRequest(req)) return json(res, 403, { error: "local requests only" });
+  // Settings → Appearance: your own character art / logo (raw image body, up to 15 MB)
+  if (req.method === "POST" && url.pathname === "/api/art/upload") {
+    const slot = { bg: "bg.jpg", logo: "logo-small.png", "logo-full": "logo.png" }[url.searchParams.get("slot")];
+    if (!slot) return json(res, 400, { error: "unknown slot" });
+    try {
+      const buf = await readRaw(req, 15 * 1024 * 1024);
+      const magic = buf.subarray(0, 12).toString("latin1");
+      const isImage = magic.startsWith("\x89PNG") || magic.startsWith("\xff\xd8\xff") || magic.startsWith("GIF8") || (magic.startsWith("RIFF") && magic.slice(8, 12) === "WEBP");
+      if (!isImage) return json(res, 400, { error: "That file isn't a PNG, JPG, WebP or GIF image" });
+      mkdirSync(ART_DIR, { recursive: true });
+      await writeFile(path.join(ART_DIR, slot), buf);
+      artVersion = Date.now();
+      return json(res, 200, { ok: true, v: artVersion });
+    } catch (e) {
+      return json(res, 400, { error: e.message });
+    }
+  }
   if (req.method === "GET" && url.pathname === "/api/achievements") {
     const appid = Number(url.searchParams.get("appid"));
     if (!Number.isInteger(appid) || appid <= 0) return json(res, 400, { error: "appid required" });

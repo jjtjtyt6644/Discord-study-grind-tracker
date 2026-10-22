@@ -34,9 +34,11 @@ You also need the **Discord desktop app** running. Rich Presence doesn't work in
 - **Subjects**: tag sessions (Math, Coding, or your own). Pick one with the chips above the timer, a row in the Subjects card, or <kbd>1</kbd>–<kbd>9</kbd>. Switching mid-session splits the time correctly.
 - **Fix your time**: **+ Add** time you forgot to track, **− Remove** time you added by mistake, or click any entry in **Today's log** to edit or delete it.
 - **"Still studying?"**: after 3 hours nonstop, it checks that you didn't forget the timer.
+- **Focus timer (Pomodoro)**: switch the Session card to **Focus** for timed rounds (25/5 by default, with a long break every 4). It has a countdown ring, a chime between phases, and keeps running with the window closed. Rounds count as study time. Presets: Classic 25/5, Deep 50/10, Flow 90/15, Sprint 15/3.
 - **Played today**: pulled from Steam automatically, including the game you're in right now.
 
 **Progress**
+- **Daily quests**: 3 new missions every day (e.g. "Finish 2 sessions of 45m+", "Complete 2 focus rounds", "Start before 10am"). +30 XP each, +50 for clearing all 3, plus a quest streak.
 - **XP, levels & ranks**: 1 XP per minute studied, plus 60 XP every day you hit your goal. Rank up from Rookie → Apprentice → Scholar → Strategist → Sage → Mastermind → Legend, with a full-screen LEVEL UP moment.
 - **18 badges** across streaks, focus, habits, goals, balance, subjects and total time. Click a badge to see what it's for and how close you are.
 - **Year heatmap**: a GitHub-style grid of every day you studied, with totals and your best day.
@@ -47,10 +49,13 @@ You also need the **Discord desktop app** running. Rich Presence doesn't work in
 - **Achievements** for any recently played game: completion, your **rarest unlock** (the % of all players who have it), latest unlocks, and the **easiest ones to get next**.
 
 **Discord**
-- A **Rich Presence card** that updates every 15s: study and play time, level, current subject or game, and a goal bar.
+- A **Rich Presence card** that updates every 15s: study and play time, level, current subject or game, a goal bar, and a focus countdown.
+- **Privacy controls**: choose exactly what the card shows (study time, play time, level, subject, game, goal bar, timer, picture, Steam button), with a live preview. Or hide it completely. Everything is on by default.
 
 **App**
 - **Auto-updates**: the app checks GitHub for new versions, downloads and verifies them in the background, and asks you to restart. You can turn this off in Settings.
+- **Notifications**: Windows notifications for hitting your goal, going over your game budget, focus rounds and breaks, finished quests, a break reminder after long sessions, and an optional "no study yet today" nudge. Each one can be switched off.
+- **Themes & your own art**: Mode colors (default), Sakura, Ocean, Ember, Matcha, Mono, or your own two colors. Upload your own character art and logo straight from Settings.
 - **Desktop app**: one `.exe` that opens in its own window. Closing the window quits it and frees the port, unless you turn on **Keep running when I close the window** so Discord keeps showing your stats. Also **Start with Windows** and **Quit** in Settings.
 - **Built-in Guide and About pages**, keyboard shortcuts (<kbd>?</kbd>), and **CSV export** of your full history.
 - **Dashboard**: aurora background, a character panel (Reze by default) with mode-colored tint and speech bubbles.
@@ -94,7 +99,9 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Added too much time | Type minutes → **− Remove** (newest time first), or click a duration in **Today's log** |
 | Delete an entry | **Today's log** → **×** → **Delete?** |
 | Change goal / game budget | ⚙ **Settings** (or <kbd>G</kbd>) |
-| Settings | ⚙ (top right) or <kbd>G</kbd>: **Goals** (presets or custom), **App** (Start with Windows, keep running, Quit), **Updates**, **Connections**, **Data & backups**, **Shortcuts**. Everything saves instantly |
+| Use the focus timer | Switch the Session card to **Focus**, then **Start focus** (or <kbd>Space</kbd>) |
+| Choose what Discord shows | ⚙ **Settings → Privacy** |
+| Settings | ⚙ (top right) or <kbd>G</kbd>: **Goals**, **Focus timer**, **Privacy**, **Notifications**, **Appearance**, **App**, **Updates**, **Connections**, **Data & backups**, **Shortcuts**. Everything saves instantly |
 | Update | Automatic: click **Restart now** on the banner when one is ready. Or ⚙ **Settings → Check for updates** |
 | Back up your history | **Export CSV** in Today's log, or ⚙ → *Download my study history* |
 | Learn everything | **Guide** at the top of the dashboard, or <kbd>?</kbd> for shortcuts |
@@ -108,7 +115,7 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Study history, settings | `%APPDATA%\GrindTracker\data.json` | `data.json` in the project folder |
 | Your keys | `%APPDATA%\GrindTracker\.env` | `.env` in the project folder |
 | Log | `%APPDATA%\GrindTracker\grind-tracker.log` | the terminal |
-| Custom art | drop `bg.jpg` / `logo-small.png` into `%APPDATA%\GrindTracker\img\` | replace files in `public/img/` |
+| Custom art | ⚙ **Settings → Appearance → Upload** (stored in `%APPDATA%\GrindTracker\img\`) | same, stored in `img/` in the project folder |
 
 Open the folder from ⚙ **Settings → Data & backups**, or paste `%APPDATA%\GrindTracker` into File Explorer.
 
@@ -191,6 +198,9 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
 | `steam.js` | Steam Web API: profile, play time, achievements and global rarity. Demo data when not connected |
 | `presence.js` | Builds the Discord card text and keeps the Rich Presence connection alive |
 | `progress.js` | XP, levels, ranks and badges, all calculated from your study history |
+| `focus.js` | The focus (Pomodoro) timer: phases, rounds, auto-next |
+| `quests.js` | Daily quests: picking 3 per day, progress, quest XP and streak |
+| `notify.js` | Windows notifications and reminders (goal, budget, break, nudge) |
 | `public/` | Dashboard (`index.html`, `app.js`), Guide/About (`guide.html`, `about.html`, `pages.js`), background (`bg.js`), styles, and art |
 | `scripts/` | `make-logo.mjs` and `build-exe.mjs` |
 

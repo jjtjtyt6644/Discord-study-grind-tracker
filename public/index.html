@@ -79,15 +79,42 @@
     <section class="bento">
       <!-- session -->
       <article class="card c-session">
-        <h2><span>01</span>Session</h2>
+        <h2><span>01</span>Session
+          <span class="tabs sess-mode" id="sessMode" role="tablist">
+            <button type="button" class="on" data-m="timer">Timer</button>
+            <button type="button" data-m="focus">Focus</button>
+          </span>
+        </h2>
         <div class="subject-pick" id="subjectPick" role="radiogroup" aria-label="Subject"></div>
-        <div class="timer" id="timer"></div>
-        <div class="timer-sub" id="timerSub">ready when you are</div>
-        <div class="kv session-kv">
-          <div><b id="sessCount">0</b><span>sessions</span></div>
-          <div><b id="sessLong">0m</b><span>longest session</span></div>
+
+        <div id="timerView">
+          <div class="timer" id="timer"></div>
+          <div class="timer-sub" id="timerSub">ready when you are</div>
+          <div class="kv session-kv">
+            <div><b id="sessCount">0</b><span>sessions</span></div>
+            <div><b id="sessLong">0m</b><span>longest session</span></div>
+          </div>
+          <button class="cta" id="studyBtn"><span id="studyBtnText">Start studying</span><kbd>Space</kbd></button>
         </div>
-        <button class="cta" id="studyBtn"><span id="studyBtnText">Start studying</span><kbd>Space</kbd></button>
+
+        <div class="focus-view" id="focusView" hidden>
+          <div class="f-ring">
+            <svg viewBox="0 0 200 200" aria-hidden="true"><circle class="f-track" cx="100" cy="100" r="88"/><circle class="f-fill" id="fFill" cx="100" cy="100" r="88"/></svg>
+            <div class="f-center">
+              <span class="f-phase" id="fPhase">Ready</span>
+              <b class="f-time" id="fTime">25:00</b>
+              <span class="f-round" id="fRound"></span>
+            </div>
+          </div>
+          <div class="f-dots" id="fDots"></div>
+          <div class="f-actions">
+            <button class="cta" id="fStart"><span>Start focus</span><kbd>Space</kbd></button>
+            <button type="button" class="btn-ghost" id="fSkip" hidden>Skip</button>
+            <button type="button" class="btn-ghost" id="fStop" hidden>Stop</button>
+          </div>
+          <p class="f-hint" id="fHint">25 min focus · 5 min breaks · long break every 4. Change in ⚙ Settings → Focus timer.</p>
+        </div>
+
         <form class="add" id="addForm">
           <input type="number" id="addMin" min="1" placeholder="Fix today's time: minutes" required aria-label="Minutes to add or remove">
           <button type="submit" value="add" title="Add minutes you forgot to track">+ Add</button>
@@ -113,9 +140,33 @@
         </div>
       </article>
 
+      <!-- quests -->
+      <article class="card c-quests">
+        <h2><span>03</span>Today's quests <span class="q-streak" id="qStreak"></span></h2>
+        <ul class="quests" id="quests"></ul>
+        <div class="q-foot" id="qFoot"></div>
+      </article>
+
+      <!-- subjects -->
+      <article class="card c-subjects">
+        <h2><span>04</span>Subjects
+          <span class="tabs" role="tablist">
+            <button type="button" class="on" data-range="today">Today</button>
+            <button type="button" data-range="week">Week</button>
+          </span>
+        </h2>
+        <div class="stack" id="subjStack"></div>
+        <ul class="legend" id="subjLegend"></ul>
+        <p class="hint subj-hint">Click a subject to study it next · or press <kbd>1</kbd>–<kbd>9</kbd></p>
+        <form class="add" id="subjForm">
+          <input id="subjIn" maxlength="24" placeholder="Add a subject" required>
+          <button type="submit">Add</button>
+        </form>
+      </article>
+
       <!-- rank / xp / badges -->
       <article class="card c-progress" id="rank">
-        <h2><span>03</span>Rank</h2>
+        <h2><span>05</span>Rank</h2>
         <div class="prog">
           <div class="emblem"><small>LEVEL</small><b id="lvlNum">0</b></div>
           <div class="prog-main">
@@ -137,38 +188,21 @@
         <div class="badges" id="badges"></div>
       </article>
 
-      <!-- subjects -->
-      <article class="card c-subjects">
-        <h2><span>04</span>Subjects
-          <span class="tabs" role="tablist">
-            <button type="button" class="on" data-range="today">Today</button>
-            <button type="button" data-range="week">Week</button>
-          </span>
-        </h2>
-        <div class="stack" id="subjStack"></div>
-        <ul class="legend" id="subjLegend"></ul>
-        <p class="hint subj-hint">Click a subject to study it next · or press <kbd>1</kbd>–<kbd>9</kbd></p>
-        <form class="add" id="subjForm">
-          <input id="subjIn" maxlength="24" placeholder="Add a subject" required>
-          <button type="submit">Add</button>
-        </form>
-      </article>
-
       <!-- achievements -->
       <article class="card c-ach">
-        <h2><span>05</span>Achievements <select class="ach-pick" id="achPick" aria-label="Show achievements for" hidden></select></h2>
+        <h2><span>06</span>Achievements <select class="ach-pick" id="achPick" aria-label="Show achievements for" hidden></select></h2>
         <div id="achBody" class="ach"><p class="muted">No achievement data yet.</p></div>
       </article>
 
       <!-- today's log -->
       <article class="card c-log">
-        <h2><span>06</span>Today's log <a class="h2-link" href="/api/export.csv" download>Export CSV ↓</a></h2>
+        <h2><span>07</span>Today's log <a class="h2-link" href="/api/export.csv" download>Export CSV ↓</a></h2>
         <ul class="log" id="log"></ul>
       </article>
 
       <!-- discord -->
       <article class="card c-discord">
-        <h2><span>07</span>On your profile</h2>
+        <h2><span>08</span>On your profile</h2>
         <div class="dc">
           <div class="dc-head">Playing</div>
           <div class="dc-row">
@@ -184,9 +218,15 @@
         <p class="hint" id="dcHint"></p>
       </article>
 
+      <!-- week -->
+      <article class="card c-week">
+        <h2><span>09</span>Last 7 days</h2>
+        <div class="chart" id="chart"><div class="goal-line" id="goalLine"><span>goal</span></div></div>
+      </article>
+
       <!-- year heatmap -->
       <article class="card c-heat">
-        <h2><span>08</span>Year in grind</h2>
+        <h2><span>10</span>Year in grind</h2>
         <div class="heat-scroll">
           <div class="heat-months" id="heatMonths"></div>
           <div class="heat" id="heat"></div>
@@ -197,15 +237,9 @@
         </div>
       </article>
 
-      <!-- week -->
-      <article class="card c-week">
-        <h2><span>09</span>Last 7 days</h2>
-        <div class="chart" id="chart"><div class="goal-line" id="goalLine"><span>goal</span></div></div>
-      </article>
-
       <!-- recent -->
       <article class="card c-games">
-        <h2><span>10</span>Recently played</h2>
+        <h2><span>11</span>Recently played</h2>
         <div class="strip" id="strip"></div>
       </article>
     </section>
@@ -278,6 +312,10 @@
       <nav class="set-nav" role="tablist" aria-label="Settings sections">
         <div class="set-brand"><span class="mode-dot"></span><b id="setTitle">Settings</b></div>
         <button type="button" class="set-tab on" data-pane="goals" role="tab"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg><span>Goals</span></button>
+        <button type="button" class="set-tab" data-pane="focus" role="tab"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg><span>Focus timer</span></button>
+        <button type="button" class="set-tab" data-pane="privacy" role="tab"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Privacy</span></button>
+        <button type="button" class="set-tab" data-pane="notify" role="tab"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span>Notifications</span></button>
+        <button type="button" class="set-tab" data-pane="appearance" role="tab"><svg viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 22a10 10 0 1 1 10-10c0 3-2 4-4 4h-2a2 2 0 0 0-1.5 3.3A2 2 0 0 1 12 22z"/></svg><span>Appearance</span></button>
         <button type="button" class="set-tab" data-pane="app" role="tab"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg><span>App</span></button>
         <button type="button" class="set-tab" data-pane="updates" role="tab"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></svg><span>Updates</span></button>
         <button type="button" class="set-tab" data-pane="connections" role="tab"><svg viewBox="0 0 24 24"><path d="M9 15l6-6"/><path d="M11 6l1-1a4 4 0 0 1 6 6l-1 1M13 18l-1 1a4 4 0 0 1-6-6l1-1"/></svg><span>Connections</span></button>
@@ -323,6 +361,173 @@
               <button type="button" data-min="240">4h</button>
             </div>
             <label class="custom-min">Custom <input type="number" id="budgetIn" min="1" step="1" inputmode="numeric"> <span>minutes</span></label>
+          </div>
+        </section>
+
+        <section class="set-pane" data-pane="focus">
+          <div class="set-card">
+            <b>Focus timer lengths</b>
+            <p>Pomodoro-style rounds: focus, short break, and a longer break after a few rounds. Focus rounds count as study time.</p>
+            <div class="num-grid">
+              <label>Focus<span><input type="number" id="fFocusIn" min="1" max="240"> min</span></label>
+              <label>Short break<span><input type="number" id="fShortIn" min="1" max="120"> min</span></label>
+              <label>Long break<span><input type="number" id="fLongIn" min="1" max="240"> min</span></label>
+              <label>Long break every<span><input type="number" id="fEveryIn" min="1" max="12"> rounds</span></label>
+            </div>
+            <div class="presets" id="focusPresets">
+              <button type="button" data-p="25,5,15,4">Classic 25 / 5</button>
+              <button type="button" data-p="50,10,20,3">Deep 50 / 10</button>
+              <button type="button" data-p="90,15,30,2">Flow 90 / 15</button>
+              <button type="button" data-p="15,3,10,4">Sprint 15 / 3</button>
+            </div>
+          </div>
+          <div class="set-card rows">
+            <label class="switch-row">
+              <span><b>Start the next round automatically</b><small>After a break ends, the next focus round starts by itself. Turn off to start each round yourself.</small></span>
+              <input type="checkbox" id="fAutoIn" role="switch">
+            </label>
+          </div>
+        </section>
+
+        <section class="set-pane" data-pane="privacy">
+          <div class="set-card rows master">
+            <label class="switch-row">
+              <span><b>Show my activity on Discord</b><small>Turn off to hide Grind Tracker from your profile completely. Tracking keeps working.</small></span>
+              <input type="checkbox" id="pv-show" role="switch">
+            </label>
+          </div>
+          <div class="privacy-grid">
+            <div class="set-card rows" id="pvList">
+            <label class="switch-row">
+              <span><b>Study time</b><small>“2h 14m studied”</small></span>
+              <input type="checkbox" id="pv-studyTime" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Play time</b><small>“1h 30m played”</small></span>
+              <input type="checkbox" id="pv-playTime" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Level &amp; rank</b><small>“lv 7” and your rank on hover</small></span>
+              <input type="checkbox" id="pv-level" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Current subject</b><small>“locked in · math”</small></span>
+              <input type="checkbox" id="pv-subject" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Game you're playing</b><small>“in elden ring”, with the game's banner</small></span>
+              <input type="checkbox" id="pv-game" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Goal progress</b><small>“▰▰▰▰▰▱▱▱▱▱ 52%”</small></span>
+              <input type="checkbox" id="pv-goal" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Session timer</b><small>“00:42:10 elapsed” / focus countdown</small></span>
+              <input type="checkbox" id="pv-timer" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Picture</b><small>Your logo, Steam avatar or game art</small></span>
+              <input type="checkbox" id="pv-image" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Steam profile button</b><small>A button linking to your Steam profile</small></span>
+              <input type="checkbox" id="pv-button" role="switch">
+            </label>
+            </div>
+            <div class="pv-preview">
+              <span class="pv-label">Live preview</span>
+              <div class="dc">
+                <div class="dc-head">Playing</div>
+                <div class="dc-row">
+                  <div class="dc-img" id="pvImg"></div>
+                  <div class="dc-text">
+                    <b>grind tracker</b>
+                    <span id="pvDetails"></span>
+                    <span id="pvState"></span>
+                    <span class="dc-time" id="pvTime"></span>
+                  </div>
+                </div>
+              </div>
+              <p class="pv-hidden" id="pvHidden" hidden>Nothing is shown on Discord.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-pane" data-pane="notify">
+          <div class="set-card rows master">
+            <label class="switch-row">
+              <span><b>Notifications</b><small>Windows notifications from Grind Tracker, even when the window is closed.</small></span>
+              <input type="checkbox" id="nt-on" role="switch">
+            </label>
+          </div>
+          <div class="set-card rows" id="ntList">
+            <label class="switch-row">
+              <span><b>Daily goal reached</b><small>A little celebration when you hit your goal.</small></span>
+              <input type="checkbox" id="nt-goal" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Game budget used up</b><small>When today's play time goes over your budget.</small></span>
+              <input type="checkbox" id="nt-budget" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Focus rounds &amp; breaks</b><small>When a focus round ends and when a break is over.</small></span>
+              <input type="checkbox" id="nt-focus" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Quests completed</b><small>Each quest, plus the bonus for clearing all 3.</small></span>
+              <input type="checkbox" id="nt-quests" role="switch">
+            </label>
+            <div class="switch-row static">
+              <span><b>Break reminder</b><small>A nudge to rest after studying nonstop for a while (not in focus mode).</small></span>
+              <select id="ntBreak" class="sel"><option value="0">Off</option><option value="45">45 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="120">2 hours</option></select>
+            </div>
+            <div class="switch-row static">
+              <span><b>“No study yet today” nudge</b><small>A reminder at this time if you haven't studied yet.</small></span>
+              <span class="nudge-ctl"><input type="time" id="ntNudgeAt" class="sel"><input type="checkbox" id="nt-nudge" role="switch"></span>
+            </div>
+          </div>
+          <div class="set-card danger soft">
+            <div><b>Try it</b><small id="ntWhere">Sends a test notification right now.</small></div>
+            <button type="button" class="btn-ghost" id="ntTest">Send test</button>
+          </div>
+        </section>
+
+        <section class="set-pane" data-pane="appearance">
+          <div class="set-card">
+            <b>Theme</b>
+            <p>“Mode colors” changes with what you're doing (purple studying, red gaming, blue on break). The others keep one look all the time.</p>
+            <div class="themes" id="themes">
+              <button type="button" data-t="mode"><i style="background:conic-gradient(#b794ff 0 33%,#ff6b8b 0 66%,#8b9cff 0)"></i>Mode colors</button>
+              <button type="button" data-t="sakura"><i style="background:linear-gradient(135deg,#ff7eb6,#ffc2e2)"></i>Sakura</button>
+              <button type="button" data-t="ocean"><i style="background:linear-gradient(135deg,#38bdf8,#818cf8)"></i>Ocean</button>
+              <button type="button" data-t="ember"><i style="background:linear-gradient(135deg,#ff7849,#ffcf5c)"></i>Ember</button>
+              <button type="button" data-t="matcha"><i style="background:linear-gradient(135deg,#7bd88f,#d4f5a4)"></i>Matcha</button>
+              <button type="button" data-t="mono"><i style="background:linear-gradient(135deg,#e5e7eb,#6b7280)"></i>Mono</button>
+              <button type="button" data-t="custom"><i id="customSwatch"></i>Custom</button>
+            </div>
+            <div class="custom-colors" id="customColors" hidden>
+              <label>Main <input type="color" id="tAccent" value="#b794ff"></label>
+              <label>Second <input type="color" id="tAccent2" value="#5eead4"></label>
+            </div>
+          </div>
+          <div class="art-grid">
+            <div class="set-card art-tile">
+              <div class="art-prev tall"><img id="artBgPrev" alt=""></div>
+              <div><b>Character art</b><small>The panel on the right of the dashboard. A tall image works best.</small></div>
+              <div class="art-actions">
+                <label class="btn-solid">Upload<input type="file" id="artBgIn" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
+                <button type="button" class="btn-ghost" data-reset="bg">Reset</button>
+              </div>
+            </div>
+            <div class="set-card art-tile">
+              <div class="art-prev round"><img id="artLogoPrev" alt=""></div>
+              <div><b>Logo</b><small>Header, browser tab and notifications. Cropped to a circle from the center.</small></div>
+              <div class="art-actions">
+                <label class="btn-solid">Upload<input type="file" id="artLogoIn" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
+                <button type="button" class="btn-ghost" data-reset="logo">Reset</button>
+              </div>
+            </div>
           </div>
         </section>
 

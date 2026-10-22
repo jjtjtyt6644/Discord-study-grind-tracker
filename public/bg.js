@@ -11,6 +11,8 @@ window.BG = (() => {
   };
   const cur = themes.idle.map((col) => [...col]);
   let target = themes.idle;
+  let mode = "idle";
+  let palette = null;
   let w, h;
   const mouse = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5 };
   const stars = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), z: Math.random() * 0.9 + 0.1, tw: Math.random() * 6.28 }));
@@ -131,7 +133,13 @@ window.BG = (() => {
 
   return {
     setMode(m) {
-      target = themes[m] ?? themes.idle;
+      mode = m;
+      target = palette ?? themes[m] ?? themes.idle;
+    },
+    // a fixed theme overrides the per-mode colors; null goes back to them
+    setPalette(p) {
+      palette = p;
+      target = palette ?? themes[mode] ?? themes.idle;
     },
     burst(x, y) {
       if (reduceMotion) return;
@@ -160,3 +168,30 @@ window.BG = (() => {
   setInterval(() => post("/api/heartbeat"), 5000);
   addEventListener("pagehide", () => navigator.sendBeacon("/api/closing", new Blob(["{}"], { type: "application/json" })));
 })();
+
+// Themes (Settings → Appearance). Shared by the dashboard, Guide and About pages.
+window.GT_THEMES = {
+  sakura: ["#ff7eb6", "#ffc2e2"],
+  ocean: ["#38bdf8", "#818cf8"],
+  ember: ["#ff7849", "#ffcf5c"],
+  matcha: ["#7bd88f", "#d4f5a4"],
+  mono: ["#e5e7eb", "#9ca3af"],
+};
+window.GT_applyTheme = (theme) => {
+  const colors = theme?.preset === "custom" ? [theme.accent, theme.accent2] : window.GT_THEMES[theme?.preset];
+  const key = JSON.stringify(colors ?? null);
+  if (window.GT_applyTheme.last === key) return;
+  window.GT_applyTheme.last = key;
+  const style = document.body.style;
+  if (!colors || !colors[0] || !colors[1]) {
+    style.removeProperty("--accent");
+    style.removeProperty("--accent2");
+    window.BG.setPalette(null);
+    return;
+  }
+  style.setProperty("--accent", colors[0]);
+  style.setProperty("--accent2", colors[1]);
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [a, b] = colors.map(rgb);
+  window.BG.setPalette([a, b, a.map((v) => v * 0.35)]); // third: a deep version of the main color
+};

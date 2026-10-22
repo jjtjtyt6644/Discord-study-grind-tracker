@@ -37,6 +37,7 @@ const BADGES = [
   { id: "polymath", cat: "Subject", name: "Polymath", icon: "✦", desc: "Study 3 different subjects in one day.", need: 3, have: (s) => s.maxSubjectsDay },
   { id: "specialist", cat: "Subject", name: "Specialist", icon: "S", desc: "Put 10 hours into a single subject.", need: 600, have: (s) => s.maxSubjectMin },
   { id: "ten", cat: "Total", name: "Ten-Hour Club", icon: "10", desc: "Study 10 hours in total.", need: 600, have: (s) => s.totalMin },
+  { id: "quester", cat: "Goal", name: "Quest Master", icon: "Q", desc: "Clear all 3 daily quests on 5 different days.", need: 5, have: (s) => s.questDays },
   { id: "hundred", cat: "Total", name: "Centurion", icon: "C", desc: "Study 100 hours in total. Legendary dedication.", need: 6000, have: (s) => s.totalMin },
 ];
 
@@ -45,7 +46,7 @@ const BADGES = [
  * @param studyMin  (dayKey) => minutes studied that day, including a running session
  * @param dayKey    (Date?) => "YYYY-MM-DD" in local time
  */
-export function computeProgress(data, studyMin, dayKey) {
+export function computeProgress(data, studyMin, dayKey, quests = { xp: 0, fullDays: 0 }) {
   const { days, settings } = data;
   const goal = settings.goalMinutes;
   const today = dayKey();
@@ -60,7 +61,7 @@ export function computeProgress(data, studyMin, dayKey) {
   const s = {
     sessionCount: sessions.length, totalMin: 0, goalDays: 0, bestStreak: 0, bestGoalStreak: 0, longestMin: 0,
     night: false, early: false, weekend: false, comeback: false, budgetDay: false,
-    maxSubjectsDay: 0, maxSubjectMin: 0, deepDayMax: 0, balancedDays: 0,
+    maxSubjectsDay: 0, maxSubjectMin: 0, deepDayMax: 0, balancedDays: 0, questDays: quests.fullDays,
   };
   const subjectMin = {};
 
@@ -118,7 +119,7 @@ export function computeProgress(data, studyMin, dayKey) {
     if (startH >= 4 && startH < 7) s.early = true;
   }
 
-  const xp = Math.round(s.totalMin) + XP_PER_GOAL_DAY * s.goalDays;
+  const xp = Math.round(s.totalMin) + XP_PER_GOAL_DAY * s.goalDays + quests.xp; // quests: 30 each, +50 for all 3
   const level = levelFromXp(xp);
   const next = RANKS.find(([min]) => min > level);
   return {
@@ -129,7 +130,7 @@ export function computeProgress(data, studyMin, dayKey) {
     nextXp: xpAt(level + 1),
     nextRank: next ? { level: next[0], name: next[1] } : null,
     // the rules, so the Guide page explains exactly what the code does
-    rules: { xpPerMinute: 1, xpPerGoalDay: XP_PER_GOAL_DAY, ranks: RANKS.map(([level, name]) => ({ level, name, xp: xpAt(level) })) },
+    rules: { xpPerMinute: 1, xpPerGoalDay: XP_PER_GOAL_DAY, xpPerQuest: 30, xpAllQuests: 50, ranks: RANKS.map(([level, name]) => ({ level, name, xp: xpAt(level) })) },
     badges: BADGES.map((b) => {
       const have = Math.min(b.need, Math.floor(b.have(s)));
       return { id: b.id, cat: b.cat, name: b.name, icon: b.icon, desc: b.desc, unlocked: have >= b.need, have, need: b.need };
