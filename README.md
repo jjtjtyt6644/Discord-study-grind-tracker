@@ -127,7 +127,8 @@ Open the folder from ⚙ **Settings → Data & backups**, or paste `%APPDATA%\Gr
 
 **Your history is protected:**
 - Saves are atomic (written to a temp file, then swapped in), so a crash or power cut can't leave a half-written file.
-- A backup is made every day (the last 14 are kept in `backups\`) and right before every update.
+- A backup is made every day and right before every update, in `backups\`. Only the newest 3 are kept; older ones are deleted automatically to save space.
+- Badges are saved the moment you earn them, so editing time or changing your goal never takes one away.
 - If `data.json` is ever missing or damaged, the newest backup is restored automatically. A damaged file is set aside, never deleted.
 
 **Updates install themselves.** The app checks GitHub 5 seconds after it starts, every 30 minutes, and whenever you open the window. A new version downloads in the background (with progress in the banner), is checked against the SHA-256 GitHub publishes, and is swapped in. If the window is open you get **Restart now**; if it's closed, the app switches over on its own. Updates only replace the exe, never your data folder. If the exe sits somewhere it can't write to (like Program Files), you get a download link instead.

@@ -1,5 +1,6 @@
-// XP, levels and badges. Everything is derived from the study history in data.json - nothing extra is stored,
-// so old sessions count too and changing a rule re-scores your whole history.
+// XP, levels and badges. XP and badge progress are derived from the study history in data.json, so old
+// sessions count too. Earned badges are also kept in data.badges, so editing time, changing your goal or a
+// rule change in an update can never take a badge away again.
 
 const XP_PER_MINUTE = 2;
 const XP_PER_GOAL_DAY = 100; // bonus for every day you hit your goal
@@ -44,6 +45,14 @@ const BADGES = [
  * @param studyMin  (dayKey) => minutes studied that day, including a running session
  * @param dayKey    (Date?) => "YYYY-MM-DD" in local time
  */
+/** Minutes studied per day for any copy of the data (used to score backups). */
+export const studyMinutesOf = (data) => (key) => {
+  const d = data.days[key];
+  let min = d ? (d.manualMinutes ?? 0) + (d.sessions ?? []).reduce((a, x) => a + (x.end - x.start) / 60_000, 0) : 0;
+  if (data.activeStudy && new Date(data.activeStudy).toLocaleDateString("en-CA") === key) min += (Date.now() - data.activeStudy) / 60_000;
+  return min;
+};
+
 export function computeProgress(data, studyMin, dayKey, quests = { xp: 0, fullDays: 0 }, goalFor = () => data.settings.goalMinutes) {
   const { days, settings } = data;
   const today = dayKey();
@@ -142,8 +151,9 @@ export function computeProgress(data, studyMin, dayKey, quests = { xp: 0, fullDa
       ranks: TIERS.map((name, i) => ({ level: i * 5 + 1, toLevel: i * 5 + 5, name, xp: xpAt(i * 5 + 1) })),
     },
     badges: BADGES.map((b) => {
-      const have = Math.min(b.need, Math.floor(b.have(s)));
-      return { id: b.id, cat: b.cat, name: b.name, icon: b.icon, desc: b.desc, unlocked: have >= b.need, have, need: b.need };
+      const earnedAt = data.badges?.[b.id] ?? null;
+      const have = earnedAt ? b.need : Math.min(b.need, Math.floor(b.have(s)));
+      return { id: b.id, cat: b.cat, name: b.name, icon: b.icon, desc: b.desc, unlocked: have >= b.need, have, need: b.need, earnedAt };
     }),
   };
 }

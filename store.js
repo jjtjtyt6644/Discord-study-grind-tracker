@@ -1,14 +1,13 @@
 // Study data on disk. Built so an update, a crash or a power cut can't wipe anyone's history:
 //   - saves are atomic: write data.json.tmp, then rename over data.json (never half-written)
-//   - one backup per day in backups/ (last 14 kept), plus one right before every update
+//   - one backup per day in backups/, plus one right before every update; only the newest 3 are kept
 //   - if data.json is missing or unreadable at start, the newest good backup is restored instead
 //     of starting empty (a broken file is kept aside as data.broken-<time>.json, never deleted)
 import { readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync, statSync, rmSync, existsSync } from "node:fs";
 import { writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 
-const KEEP_DAILY = 14;
-const KEEP_UPDATE = 5;
+const KEEP = 3; // only the newest 3 backups are kept, to save space
 
 export function createStore(file) {
   const dir = path.join(path.dirname(file), "backups");
@@ -55,11 +54,20 @@ export function createStore(file) {
     }
   }
 
+  // delete everything but the newest KEEP backups
   function prune() {
-    const all = backups();
-    const daily = all.filter((b) => /^data-\d{4}-\d{2}-\d{2}\.json$/.test(b.name));
-    const pre = all.filter((b) => b.name.startsWith("data-before-"));
-    for (const b of [...daily.slice(KEEP_DAILY), ...pre.slice(KEEP_UPDATE)]) rmSync(path.join(dir, b.name), { force: true });
+    for (const b of backups().slice(KEEP)) rmSync(path.join(dir, b.name), { force: true });
+  }
+
+  /** Every readable backup, newest first, with when it was made. */
+  function readBackups() {
+    const out = [];
+    for (const b of backups()) {
+      try {
+        out.push({ at: b.at, data: parse(readFileSync(path.join(dir, b.name), "utf8")) });
+      } catch {}
+    }
+    return out;
   }
 
   /** Copy the current data into backups/data-<tag>.json. */
@@ -77,6 +85,8 @@ export function createStore(file) {
   return {
     load,
     backup,
+    prune,
+    readBackups,
     /** Debounced save for normal changes. */
     save(data) {
       clearTimeout(timer);

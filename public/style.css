@@ -701,6 +701,32 @@ body.no-art .about-art { display: none; }
 .act-toggle button[aria-checked="true"] { background: var(--accent); color: var(--ink); box-shadow: 0 0 14px -4px var(--accent); }
 @media (max-width: 560px) { .act-toggle { order: 4; margin: 6px 0 0; } }
 
+/* ============ top bar: one tidy line, everything 32px tall ============ */
+.top { gap: 12px; min-height: 44px; }
+.top > * { flex-shrink: 0; }
+.brand { white-space: nowrap; }
+.nav { margin-left: 8px; }
+.nav a { white-space: nowrap; }
+.act-toggle { margin-left: auto; height: 32px; padding: 3px; align-items: stretch; }
+.act-toggle button { height: auto; padding: 0 14px; }
+.top-right { margin-left: 0; gap: 8px; }
+.top .chip { height: 32px; }
+.clock { display: flex; align-items: baseline; gap: 4px; height: 32px; line-height: 32px; padding: 0 4px 0 6px; min-width: 0; white-space: nowrap; font-size: 14px; }
+.clock small { font: 600 10px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+@media (max-width: 1180px) {
+  .top { gap: 10px; }
+  .brand { gap: 10px; letter-spacing: .14em; font-size: 14px; }
+  .nav { margin-left: 2px; gap: 2px; }
+  .nav a { padding: 6px 9px; letter-spacing: .12em; }
+  .act-toggle button { padding: 0 11px; }
+}
+@media (max-width: 900px) {
+  .top .chip span { display: none; }
+  .top .chip { padding: 0 10px; }
+  .clock { display: none; }
+}
+@media (max-width: 560px) { .act-toggle { margin: 6px 0 0; } }
+
 /* ============ games (settings) + log notes ============ */
 .now-game { display: flex; align-items: center; gap: 14px; }
 .now-game > b { font: 600 15px var(--display); }

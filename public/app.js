@@ -870,7 +870,14 @@ function renderBig(min) {
 
 function tick() {
   const now = new Date();
-  $("clock").textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // "01:33" with a small "am", so the clock never wraps onto two lines
+  const parts = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" }).formatToParts(now);
+  const period = parts.find((p) => p.type === "dayPeriod")?.value;
+  const time = parts.filter((p) => p.type !== "dayPeriod").map((p) => p.value).join("").trim();
+  if ($("clock").dataset.t !== time + period) {
+    $("clock").dataset.t = time + period;
+    $("clock").replaceChildren(time, ...(period ? [el("small", null, period)] : []));
+  }
   $("dateLabel").textContent = now.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }).toUpperCase();
   if (!stats) return;
   const { study, discord } = stats;

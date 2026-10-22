@@ -11,7 +11,7 @@ import { questsToday, questTotals, QUEST_XP, ALL_QUESTS_BONUS } from "./quests.j
 import { createNotifier, startReminders, NOTIFY_DEFAULTS } from "./notify.js";
 import { createGameDetector } from "./games.js";
 import { vocab } from "./vocab.js";
-import { computeProgress } from "./progress.js";
+import { computeProgress, studyMinutesOf } from "./progress.js";
 import { update, checkForUpdate, checkIfStale, installLatest, restartIntoUpdate, startUpdateChecks } from "./updater.js";
 import { createStore } from "./store.js";
 
@@ -51,6 +51,33 @@ data.settings.theme ??= { preset: "mode", accent: null, accent2: null };
 data.settings.games = { detect: true, custom: [], ignore: [], ...data.settings.games };
 data.settings.activity ??= "study"; // "study" | "work": only changes the words
 data.settings.weekendGoal ??= null; // minutes, or null = same as weekdays
+
+// Earned badges are kept for good (id -> when). The first time this runs, every backup is scored too,
+// so badges that older versions lost (after edits or goal changes) come back.
+if (!data.badges) {
+  data.badges = {};
+  for (const b of store.readBackups().reverse()) {
+    try {
+      const p = computeProgress(b.data, studyMinutesOf(b.data), dayKey);
+      for (const x of p.badges) if (x.unlocked) data.badges[x.id] ??= Math.round(b.at);
+    } catch {}
+  }
+  save();
+}
+store.prune();
+
+function keepBadges(p) {
+  let added = false;
+  for (const b of p.badges) {
+    if (b.unlocked && !data.badges[b.id]) {
+      data.badges[b.id] = Date.now();
+      b.earnedAt = data.badges[b.id];
+      added = true;
+    }
+  }
+  if (added) save();
+  return p;
+}
 
 // the goal for a given day (weekends can have their own)
 function goalFor(key = dayKey()) {
@@ -464,7 +491,7 @@ async function buildStats() {
     heatmap: heatmap(),
     quests: currentQuests(),
     focus: focus.state(),
-    progress: computeProgress(data, studyMin, dayKey, questTotals(data), goalFor),
+    progress: keepBadges(computeProgress(data, studyMin, dayKey, questTotals(data), goalFor)),
     game,
     games: { ...games.info(), detect: data.settings.games.detect !== false, custom: data.settings.games.custom, ignore: data.settings.games.ignore, detected },
     played: {
