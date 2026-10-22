@@ -43,9 +43,9 @@ jobs:
             **[GrindTracker.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/GrindTracker.exe)**: Windows 10/11, no install, no Node.js needed.
 
             1. Download `GrindTracker.exe` and put it somewhere permanent (e.g. a `Grind Tracker` folder in Documents).
-            2. Double-click it. The dashboard opens in your browser.
+            2. Double-click it. Grind Tracker opens in its own window. Closing the window quits it.
             3. Follow the **Connect your accounts** steps (Discord Application ID, Steam key, Steam profile).
-            4. Optional: ⚙ Settings → **Start with Windows**.
+            4. Optional: ⚙ Settings → **Start with Windows** and **Keep running when I close the window** (so Discord keeps showing your stats).
 
             > **"Windows protected your PC"?** The exe isn't code-signed (that costs money), so SmartScreen warns about new downloads. Click **More info → Run anyway**. The full source is in this repo, and every release is built by GitHub Actions from it.
 

@@ -1080,6 +1080,7 @@ $("settingsBtn").addEventListener("click", () => {
   $("desktopOpts").hidden = !appInfo.autostartSupported;
   $("quitBtn").hidden = !appInfo.desktop;
   $("autostartIn").checked = Boolean(appInfo.autostart);
+  $("bgIn").checked = Boolean(appInfo.closeToBackground);
   $("appMeta").textContent = `Grind Tracker v${appInfo.version ?? "?"}${appInfo.dataDir ? ` · your data: ${appInfo.dataDir}` : ""}`;
   dialog.showModal();
 });
@@ -1096,9 +1097,20 @@ $("autostartIn").addEventListener("change", async (e) => {
   }
 });
 
+$("bgIn").addEventListener("change", async (e) => {
+  try {
+    apply(await api("/api/settings", { closeToBackground: e.target.checked }));
+    toast(e.target.checked ? "Closing the window keeps Grind Tracker running" : "Closing the window quits Grind Tracker");
+  } catch (err) {
+    e.target.checked = !e.target.checked;
+    toast(err.message, true);
+  }
+});
+
 $("quitBtn").addEventListener("click", async () => {
   dialog.close();
   await api("/api/quit", {}).catch(() => {});
+  window.close(); // works in the app window; in a normal tab the screen below explains instead
   $("quitScreen").hidden = false;
   document.title = "Grind Tracker (closed)";
 });

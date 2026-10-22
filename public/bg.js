@@ -144,3 +144,19 @@ window.BG = (() => {
     },
   };
 })();
+
+// App-window heartbeat: the desktop app opens the dashboard with ?window=1. That window (and the
+// Guide/About pages it navigates to, via sessionStorage) tells the app it's alive, so closing it
+// can quit the app and free the port. Normal browser tabs never send this.
+(() => {
+  let isWindow = false;
+  try {
+    if (new URLSearchParams(location.search).has("window")) sessionStorage.setItem("gt-window", "1");
+    isWindow = sessionStorage.getItem("gt-window") === "1";
+  } catch {}
+  if (!isWindow) return;
+  const post = (p) => fetch(p, { method: "POST", headers: { "content-type": "application/json" }, body: "{}", keepalive: true }).catch(() => {});
+  post("/api/heartbeat");
+  setInterval(() => post("/api/heartbeat"), 5000);
+  addEventListener("pagehide", () => navigator.sendBeacon("/api/closing", new Blob(["{}"], { type: "application/json" })));
+})();

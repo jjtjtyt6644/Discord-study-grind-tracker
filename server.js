@@ -2,7 +2,7 @@ import http from "node:http";
 import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, openBrowser, autostartSupported, getAutostart, setAutostart } from "./desktop.js";
+import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, openAppWindow, autostartSupported, getAutostart, setAutostart } from "./desktop.js";
 import { getSteam, getAchievementsFor, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
 import { startPresence, updatePresence, presenceState, buildActivity } from "./presence.js";
 import { computeProgress } from "./progress.js";
@@ -331,7 +331,14 @@ async function buildStats() {
     steam: steam && { ...steam, playtimes: undefined },
     steamError,
     config: configStatus(),
-    app: { version: VERSION, desktop: isDesktop, autostartSupported, autostart, dataDir: isDesktop ? APP_DIR : null },
+    app: {
+      version: VERSION,
+      desktop: isDesktop,
+      autostartSupported,
+      autostart,
+      closeToBackground: Boolean(data.settings.closeToBackground),
+      dataDir: isDesktop ? APP_DIR : null,
+    },
   };
   const activity = buildActivity(stats, process.env.LARGE_IMAGE);
   stats.discord = { ...presenceState(), activity };
@@ -498,13 +505,27 @@ const routes = {
   "POST /api/autostart": async (body) => {
     autostart = await setAutostart(Boolean(body.enabled));
   },
-  // the exe has no window to close, so the dashboard offers Quit
   "POST /api/quit": async () => {
     setTimeout(flushAndExit, 300);
+  },
+  "POST /api/window": async () => {
+    if (isDesktop) showWindow();
+  },
+  "POST /api/heartbeat": async () => {
+    win.open = true;
+    win.lastBeat = Date.now();
+    clearTimeout(win.closing);
+  },
+  "POST /api/closing": async () => {
+    const at = Date.now();
+    clearTimeout(win.closing);
+    // a page change reloads within ~1s and beats again; give it 4s before calling it closed
+    win.closing = setTimeout(() => win.lastBeat < at && windowGone("closed"), 4_000);
   },
   "POST /api/settings": async (body) => {
     if (body.goalMinutes != null) data.settings.goalMinutes = clamp(body.goalMinutes, 15, 1440);
     if (body.playBudgetMinutes != null) data.settings.playBudgetMinutes = clamp(body.playBudgetMinutes, 15, 1440);
+    if (body.closeToBackground != null) data.settings.closeToBackground = Boolean(body.closeToBackground);
     save();
   },
 };
@@ -538,6 +559,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = req.method === "POST" ? await readBody(req) : null;
       const out = await route(body);
+      if (url.pathname === "/api/heartbeat" || url.pathname === "/api/closing") return json(res, 200, { ok: true });
       if (req.method === "POST") {
         pushPresence();
         return json(res, 200, { ...(await buildStats()), result: out ?? null });
@@ -577,12 +599,38 @@ function flushAndExit() {
 const URL_HOME = `http://localhost:${PORT}`;
 const background = process.argv.includes("--background"); // started by Windows at login: stay quiet
 
+// ---------- the app window (desktop exe only) ----------
+// The window's page (bg.js) sends a heartbeat every few seconds and a "closing" beacon when it
+// goes away. A beacon with no new heartbeat shortly after (i.e. not just a page change), or a
+// long silence (crash, force-close), means the window is gone: quit and free the port.
+const WINDOW_URL = `${URL_HOME}/?window=1`;
+const win = { open: false, lastBeat: 0, closing: null };
+
+function showWindow() {
+  openAppWindow(WINDOW_URL);
+}
+
+function windowGone(why) {
+  if (!win.open) return;
+  win.open = false;
+  if (data.settings.closeToBackground) console.log(`Window closed (${why}); still running in the background`);
+  else {
+    console.log(`Window closed (${why}); quitting`);
+    flushAndExit(); // frees the port
+  }
+}
+
+setInterval(() => {
+  if (win.open && Date.now() - win.lastBeat > 45_000) windowGone("no heartbeat");
+}, 5_000).unref();
+
 server.on("error", async (e) => {
   if (e.code !== "EADDRINUSE") throw e;
   // already running (e.g. double-clicked twice): just bring up the dashboard
   const alive = await fetch(`${URL_HOME}/api/stats`, { signal: AbortSignal.timeout(3000) }).then((r) => r.ok).catch(() => false);
   if (alive) {
-    if (!background) openBrowser(URL_HOME);
+    // ask the running copy to open its window (or a browser tab, from source)
+    if (!background) await fetch(`${URL_HOME}/api/window`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => {});
     process.exit(0);
   }
   console.error(`Port ${PORT} is used by another program. Set a different PORT in ${ENV_FILE}`);
@@ -593,7 +641,7 @@ server.listen(PORT, "127.0.0.1", () => {
   console.log(`✓ Grind Tracker ${VERSION} running at ${URL_HOME}${isDesktop ? ` (data: ${APP_DIR})` : ""}`);
   if (!process.env.STEAM_API_KEY || !process.env.STEAM_ID64) console.log("  Steam: demo mode (connect it in the dashboard)");
   if (!process.env.DISCORD_CLIENT_ID) console.log("  Discord: off (connect it in the dashboard)");
-  if (isDesktop && !background) openBrowser(URL_HOME);
+  if (isDesktop && !background) showWindow();
 
   startPresence(process.env.DISCORD_CLIENT_ID);
   setInterval(pushPresence, 15_000);

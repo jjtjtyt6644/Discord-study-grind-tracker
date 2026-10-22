@@ -17,7 +17,7 @@ locked in · math  ▰▰▰▰▰▱▱▱▱▱  52%
 **[Get the latest GrindTracker.exe from Releases](https://github.com/jjtjtyt6644/Discord-study-grind-tracker/releases/latest)**. It's one file: no install and no Node.js needed.
 
 1. Put `GrindTracker.exe` somewhere permanent, e.g. a `Grind Tracker` folder in Documents.
-2. **Double-click it.** The dashboard opens in your browser at `http://localhost:3000`.
+2. **Double-click it.** Grind Tracker opens in its own app window (no browser tabs). **Closing the window quits the app.**
 3. Follow the **Connect your accounts** window (see [Connect your accounts](#connect-your-accounts)).
 4. Optional: ⚙ **Settings → Start with Windows**, so it's always running when you study.
 
@@ -50,7 +50,7 @@ You also need the **Discord desktop app** running. Rich Presence doesn't work in
 - A **Rich Presence card** that updates every 15s: study and play time, level, current subject or game, and a goal bar.
 
 **App**
-- **Desktop app**: one `.exe`, opens the dashboard on launch, optional **Start with Windows**, and **Quit** from Settings.
+- **Desktop app**: one `.exe` that opens in its own window. Closing the window quits it and frees the port, unless you turn on **Keep running when I close the window** so Discord keeps showing your stats. Also **Start with Windows** and **Quit** in Settings.
 - **Built-in Guide and About pages**, keyboard shortcuts (<kbd>?</kbd>), and **CSV export** of your full history.
 - **Dashboard**: aurora background, a character panel (Reze by default) with mode-colored tint and speech bubbles.
 
@@ -93,7 +93,7 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Added too much time | Type minutes → **− Remove** (newest time first), or click a duration in **Today's log** |
 | Delete an entry | **Today's log** → **×** → **Delete?** |
 | Change goal / game budget | ⚙ **Settings** (or <kbd>G</kbd>) |
-| Start with Windows / Quit | ⚙ **Settings** (desktop app) |
+| Start with Windows / keep running after closing / Quit | ⚙ **Settings** (desktop app) |
 | Back up your history | **Export CSV** in Today's log, or ⚙ → *Download my study history* |
 | Learn everything | **Guide** at the top of the dashboard, or <kbd>?</kbd> for shortcuts |
 
@@ -128,7 +128,9 @@ Paste `%APPDATA%\GrindTracker` into File Explorer's address bar to open the fold
 
 **"Played today" is 0**: Grind Tracker counts play time from its first run each day. Turn on **Start with Windows** so it's always running.
 
-**Double-clicked the exe and nothing new opened**: it's already running, so it just reopens the dashboard in your browser. Quit it from ⚙ Settings.
+**Discord card disappears when I close the window**: that's the default, because closing the window quits the app. Turn on ⚙ **Settings → Keep running when I close the window** to keep it going; reopen the window by launching the exe again.
+
+**Double-clicked the exe and nothing new started**: it's already running, so it just opens its window again.
 
 **Port already in use**: another program uses port 3000. Add `PORT=3100` (or any free port) to your `.env` and restart.
 
@@ -172,7 +174,7 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
 | File | Job |
 | --- | --- |
 | `server.js` | Local web server (only reachable from your PC): study sessions, subjects, log, settings, and the `/api/*` the dashboard uses |
-| `desktop.js` | What's different in the exe: data folder, opening the browser, Start with Windows, log file |
+| `desktop.js` | What's different in the exe: data folder, the app window (Edge/Chrome app mode), Start with Windows, log file |
 | `steam.js` | Steam Web API: profile, play time, achievements and global rarity. Demo data when not connected |
 | `presence.js` | Builds the Discord card text and keeps the Rich Presence connection alive |
 | `progress.js` | XP, levels, ranks and badges, all calculated from your study history |
