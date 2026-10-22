@@ -7,7 +7,7 @@
   <link rel="icon" href="img/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body data-mode="idle">
@@ -34,18 +34,19 @@
         <span>GRIND<b>//</b>TRACKER</span>
       </div>
       <div class="top-right">
-        <span class="chip" id="discordChip"><i class="dot"></i><span>Discord</span></span>
+        <button class="chip" id="discordChip" title="Connections"><i class="dot"></i><span>Discord</span></button>
         <span class="clock" id="clock">--:--</span>
-        <button class="icon-btn" id="settingsBtn" aria-label="Goals and settings" title="Goals">
+        <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         </button>
       </div>
     </header>
 
-    <p class="notice" id="notice" hidden></p>
+    <button class="notice" id="notice" hidden></button>
 
-    <!-- hero -->
+    <!-- hero: the first screen -->
     <section class="hero">
+      <div class="watermark" aria-hidden="true"><span id="watermark">ON BREAK</span></div>
       <div class="hero-main">
         <div class="eyebrow"><span class="mode-dot"></span><span id="modeLabel">ON BREAK</span><span class="sep">/</span><span id="dateLabel"></span></div>
         <div class="big" id="bigStudy"><span class="n">0</span><span class="u">h</span><span class="n">00</span><span class="u">m</span></div>
@@ -62,7 +63,12 @@
         </div>
         <div class="stat"><dt>This week</dt><dd id="weekTotal">0h 00m</dd><small id="streak">no streak yet</small></div>
       </dl>
+      <a class="scroll-cue" href="#stats"><span>stats</span><i></i></a>
     </section>
+
+    <div class="marquee" aria-hidden="true"><div class="marquee-track" id="marquee"></div></div>
+
+    <div class="section-head" id="stats"><span>//</span> today's loadout <i></i></div>
 
     <section class="bento">
       <!-- session -->
@@ -137,17 +143,82 @@
     </section>
   </main>
 
+  <!-- first-run / connections wizard -->
+  <dialog id="setup" class="setup">
+    <form id="setupForm">
+      <header class="setup-head">
+        <div class="eyebrow"><span class="mode-dot"></span>SETUP</div>
+        <h3>Connect your accounts</h3>
+        <p>Everything stays on this computer. Your keys are saved to the <code>.env</code> file next to the app and are never sent anywhere except Steam and your own Discord app.</p>
+      </header>
+
+      <fieldset class="step">
+        <div class="step-n">01</div>
+        <div class="step-body">
+          <legend>Discord Application ID <span class="state" id="stDiscord"></span></legend>
+          <ol>
+            <li>Open the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal ↗</a> and click <b>New Application</b>.</li>
+            <li>Its name is what your profile shows after "Playing", so make it cool.</li>
+            <li>On <b>General Information</b>, copy the <b>Application ID</b>.</li>
+          </ol>
+          <input id="inDiscord" inputmode="numeric" autocomplete="off" placeholder="e.g. 123456789012345678">
+        </div>
+      </fieldset>
+
+      <fieldset class="step">
+        <div class="step-n">02</div>
+        <div class="step-body">
+          <legend>Steam Web API key <span class="state" id="stKey"></span></legend>
+          <ol>
+            <li>Go to <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener">steamcommunity.com/dev/apikey ↗</a> and sign in.</li>
+            <li>For the domain name, type <code>localhost</code>, then copy the key.</li>
+          </ol>
+          <input id="inKey" type="password" autocomplete="off" placeholder="32-character key">
+        </div>
+      </fieldset>
+
+      <fieldset class="step">
+        <div class="step-n">03</div>
+        <div class="step-body">
+          <legend>Your Steam profile <span class="state" id="stId"></span></legend>
+          <ol>
+            <li>Paste your profile link (<a href="https://steamcommunity.com/my/profile" target="_blank" rel="noopener">open my profile ↗</a>) or your SteamID64 from <a href="https://steamid.io" target="_blank" rel="noopener">steamid.io ↗</a>.</li>
+            <li>Set <b>Game details</b> to <b>Public</b> in <a href="https://steamcommunity.com/my/edit/settings" target="_blank" rel="noopener">privacy settings ↗</a> so play time shows up.</li>
+          </ol>
+          <input id="inId" autocomplete="off" placeholder="https://steamcommunity.com/id/yourname or 7656119…">
+        </div>
+      </fieldset>
+
+      <details class="advanced">
+        <summary>Optional: Discord card image</summary>
+        <p>Upload <code>public/img/logo.png</code> under <b>Rich Presence → Art Assets</b> in the Developer Portal with the name <code>logo</code>, then type <code>logo</code> here. A direct <code>https://</code> image link works too.</p>
+        <input id="inImage" autocomplete="off" placeholder="logo">
+      </details>
+
+      <p class="form-error" id="setupError" role="alert"></p>
+
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="setupSkip">Use demo data for now</button>
+        <button type="submit" class="solid" id="setupSave">Save &amp; connect</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- goals -->
   <dialog id="settings">
     <form method="dialog" id="settingsForm">
-      <h2><span>⚙</span>Goals</h2>
+      <h2><span>⚙</span>Settings</h2>
       <label>Daily study goal <span><input type="number" id="goalIn" min="15" max="1440" step="15"> min</span></label>
       <label>Game time budget <span><input type="number" id="budgetIn" min="15" max="1440" step="15"> min</span></label>
+      <button type="button" class="link-btn" id="openSetup">Edit Discord &amp; Steam connections →</button>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate class="ghost">Cancel</button>
         <button value="save" class="solid">Save</button>
       </div>
     </form>
   </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
 
   <script src="app.js"></script>
 </body>

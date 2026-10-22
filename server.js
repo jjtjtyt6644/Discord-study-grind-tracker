@@ -3,18 +3,22 @@ import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getSteam } from "./steam.js";
+import { getSteam, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
 import { startPresence, updatePresence, presenceState, buildActivity } from "./presence.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const ENV_FILE = process.env.ENV_FILE || path.join(ROOT, ".env");
 try {
-  process.loadEnvFile(path.join(ROOT, ".env"));
+  process.loadEnvFile(ENV_FILE);
 } catch {}
 
 const PORT = Number(process.env.PORT) || 3000;
-const DATA_FILE = path.join(ROOT, "data.json");
+const DATA_FILE = process.env.DATA_FILE || path.join(ROOT, "data.json");
 const PUBLIC = path.join(ROOT, "public");
-const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png" };
+const TYPES = {
+  ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml",
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
+};
 
 // ---------- persistence ----------
 const dayKey = (d = new Date()) => d.toLocaleDateString("en-CA"); // local YYYY-MM-DD
@@ -87,6 +91,73 @@ function playedToday(steam) {
   return sum + Math.max(0, live - recorded);
 }
 
+// ---------- config (keys entered in the dashboard) ----------
+const mask = (v) => (v ? `${"•".repeat(Math.max(0, v.length - 4))}${v.slice(-4)}` : "");
+
+// Never sends the Steam key back to the page, only whether it's set.
+function configStatus() {
+  const e = process.env;
+  return {
+    discordClientId: e.DISCORD_CLIENT_ID || "",
+    steamApiKey: mask(e.STEAM_API_KEY),
+    steamId: e.STEAM_ID64 || "",
+    largeImage: e.LARGE_IMAGE || "",
+    complete: Boolean(e.DISCORD_CLIENT_ID && e.STEAM_API_KEY && e.STEAM_ID64),
+  };
+}
+
+async function writeEnv(updates) {
+  let text;
+  try {
+    text = await readFile(ENV_FILE, "utf8");
+  } catch {
+    text = await readFile(path.join(ROOT, ".env.example"), "utf8").catch(() => "");
+  }
+  const lines = text.split(/\r?\n/);
+  for (const [k, v] of Object.entries(updates)) {
+    const i = lines.findIndex((l) => l.startsWith(`${k}=`));
+    if (i >= 0) lines[i] = `${k}=${v}`;
+    else lines.push(`${k}=${v}`);
+    process.env[k] = v;
+  }
+  await writeFile(ENV_FILE, lines.join("\n").replace(/\n*$/, "\n"));
+}
+
+async function saveConfig(body) {
+  const clean = (v) => String(v ?? "").trim();
+  const discordId = clean(body.discordClientId);
+  const steamKey = clean(body.steamApiKey);
+  const steamInput = clean(body.steamId);
+  const largeImage = clean(body.largeImage);
+  const updates = {};
+
+  if (discordId) {
+    if (!/^\d{17,20}$/.test(discordId)) throw new Error("Discord Application ID should be 17-20 digits");
+    updates.DISCORD_CLIENT_ID = discordId;
+  }
+  if (steamKey && !/^[A-Fa-f0-9]{32}$/.test(steamKey)) throw new Error("Steam API key should be 32 letters/numbers");
+  if (largeImage && !/^([\w-]{1,64}|https:\/\/\S{1,500})$/.test(largeImage)) {
+    throw new Error("Large image must be an Art Asset name or an https:// link");
+  }
+  if (body.largeImage !== undefined) updates.LARGE_IMAGE = largeImage;
+
+  // Check Steam before saving anything, so a typo never replaces working keys.
+  let steamName = null;
+  if (steamKey || steamInput) {
+    const key = steamKey || process.env.STEAM_API_KEY;
+    if (!key) throw new Error("Add your Steam API key too");
+    const id = await resolveSteamId(steamInput || process.env.STEAM_ID64 || "", key);
+    steamName = await verifySteam(key, id);
+    if (steamKey) updates.STEAM_API_KEY = steamKey;
+    updates.STEAM_ID64 = id;
+  }
+
+  await writeEnv(updates);
+  clearSteamCache();
+  if (updates.DISCORD_CLIENT_ID) startPresence(updates.DISCORD_CLIENT_ID);
+  return { ok: true, steamName, config: configStatus() };
+}
+
 // ---------- stats ----------
 async function buildStats() {
   let steam = null;
@@ -126,6 +197,7 @@ async function buildStats() {
     },
     steam: steam && { ...steam, playtimes: undefined },
     steamError,
+    config: configStatus(),
   };
   const activity = buildActivity(stats, process.env.LARGE_IMAGE);
   stats.discord = { ...presenceState(), activity };
@@ -185,6 +257,7 @@ const routes = {
     day().manualMinutes += Math.round(minutes);
     save();
   },
+  "POST /api/config": saveConfig,
   "POST /api/settings": async (body) => {
     if (body.goalMinutes != null) data.settings.goalMinutes = clamp(body.goalMinutes, 15, 1440);
     if (body.playBudgetMinutes != null) data.settings.playBudgetMinutes = clamp(body.playBudgetMinutes, 15, 1440);
@@ -192,16 +265,28 @@ const routes = {
   },
 };
 
+// Only this machine's browser may talk to the API: other websites can't reach it (Origin check),
+// and DNS-rebinding tricks fail the Host check.
+const LOCAL_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
+function isLocalRequest(req) {
+  if (!LOCAL_HOSTS.has(req.headers.host)) return false;
+  const origin = req.headers.origin;
+  if (origin && !LOCAL_HOSTS.has(origin.replace(/^http:\/\//, ""))) return false;
+  if (req.method === "POST" && !String(req.headers["content-type"]).startsWith("application/json")) return false;
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const route = routes[`${req.method} ${url.pathname}`];
+  if (url.pathname.startsWith("/api/") && !isLocalRequest(req)) return json(res, 403, { error: "local requests only" });
   if (route) {
     try {
       const body = req.method === "POST" ? await readBody(req) : null;
       const out = await route(body);
       if (req.method === "POST") {
         pushPresence();
-        return json(res, 200, await buildStats());
+        return json(res, 200, { ...(await buildStats()), result: out ?? null });
       }
       return json(res, 200, out);
     } catch (e) {
@@ -214,7 +299,8 @@ const server = http.createServer(async (req, res) => {
   if (!file.startsWith(PUBLIC + path.sep)) return json(res, 403, { error: "forbidden" });
   try {
     const content = await readFile(file);
-    res.writeHead(200, { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream" });
+    // no-cache = browser revalidates, so dashboard updates show up without a hard refresh
+    res.writeHead(200, { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream", "cache-control": "no-cache" });
     res.end(content);
   } catch {
     json(res, 404, { error: "not found" });

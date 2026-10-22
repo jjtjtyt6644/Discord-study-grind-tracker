@@ -37,41 +37,7 @@ cd Discord-study-grind-tracker
 npm install
 ```
 
-### 2. Create your Discord app (this is what shows on your profile)
-
-1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and click **New Application**.
-2. Pick a name. Your profile will say **"Playing &lt;that name&gt;"**, so choose something like `grind tracker` or `locked in`.
-3. On **General Information**, copy the **Application ID**.
-
-### 3. Get your Steam details
-
-1. **API key**: go to <https://steamcommunity.com/dev/apikey>, enter any domain (e.g. `localhost`), and copy the key.
-2. **SteamID64**: paste your Steam profile link into <https://steamid.io> and copy the 17-digit number (starts with `7656…`).
-3. **Make your games visible**: on Steam, go to **Profile → Edit Profile → Privacy Settings** and set **My profile** and **Game details** to **Public**. Otherwise Steam returns no games.
-
-### 4. Fill in `.env`
-
-Copy the example file:
-
-```bash
-cp .env.example .env
-```
-
-On Windows Command Prompt, use `copy .env.example .env` instead.
-
-Then open `.env` and paste in your values:
-
-```ini
-DISCORD_CLIENT_ID=your application id
-STEAM_API_KEY=your steam api key
-STEAM_ID64=7656119xxxxxxxxxx
-LARGE_IMAGE=
-PORT=3000
-```
-
-`.env` holds your secret keys. It's already in `.gitignore`, so never commit or share it.
-
-### 5. Add your art (optional)
+### 2. Add your art (optional)
 
 Put two images in `public/img/`:
 
@@ -90,13 +56,52 @@ This creates `public/img/logo.png` (1024×1024, with a neon ring). If the face i
 
 No art? The dashboard still works. It just hides the character panel.
 
-### 6. Start it
+### 3. Start it
 
 ```bash
 npm start
 ```
 
-Open **<http://localhost:3000>**. Within about 15 seconds your Discord profile shows the activity card. The terminal should say `✓ Discord Rich Presence connected`.
+Then open **<http://localhost:3000>** in your browser.
+
+### 4. Connect your accounts (right in the dashboard)
+
+The first time you open the dashboard, a **Connect your accounts** window pops up. Each step has a link straight to the website you need:
+
+| Step | What to paste | Where to get it |
+| --- | --- | --- |
+| **01 · Discord Application ID** | A 17-20 digit number | [Discord Developer Portal](https://discord.com/developers/applications) → **New Application** → **General Information** → copy **Application ID**. The app's name is what your profile shows after "Playing", so pick something like `grind tracker` or `locked in`. |
+| **02 · Steam Web API key** | A 32-character key | [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey). Type `localhost` as the domain name. |
+| **03 · Your Steam profile** | Your profile link **or** SteamID64 | Your profile link works as-is (e.g. `https://steamcommunity.com/id/yourname`). You can also use the 17-digit ID from [steamid.io](https://steamid.io). |
+
+Then click **Save & connect**. Before saving, the app checks with Steam that your key and profile work, and it shows **"Connected as &lt;your name&gt;"** when they do. Discord connects on its own a few seconds later. You don't need to restart.
+
+Also set **Game details** to **Public** in your [Steam privacy settings](https://steamcommunity.com/my/edit/settings), or Steam won't report your play time.
+
+- Want to look around first? Click **Use demo data for now**. You can open the window again any time by clicking the **Discord** chip (top right), the demo-mode banner, or ⚙ → *Edit Discord & Steam connections*.
+- **Is typing keys into the page safe?** Yes. The dashboard only runs on your own computer (`localhost`), and the server refuses requests from any other website. Your keys are saved to the `.env` file in the app folder and only ever go to Steam and your own Discord app. The page never shows your Steam key again after you save it.
+
+<details>
+<summary>Prefer editing a file? Set the keys in <code>.env</code> instead</summary>
+
+```bash
+cp .env.example .env
+```
+
+(On Windows Command Prompt, use `copy .env.example .env`.) Then fill it in and restart the app:
+
+```ini
+DISCORD_CLIENT_ID=your application id
+STEAM_API_KEY=your steam api key
+STEAM_ID64=7656119xxxxxxxxxx
+LARGE_IMAGE=
+PORT=3000
+```
+
+`.env` holds your secret keys. It's already in `.gitignore`, so never commit or share it.
+</details>
+
+Within about 15 seconds of connecting, your Discord profile shows the activity card, and the top-right chip says **Discord live**.
 
 ---
 
@@ -107,6 +112,7 @@ Open **<http://localhost:3000>**. Within about 15 seconds your Discord profile s
 | Start / stop studying | Click **Start studying**, or press <kbd>Space</kbd> anywhere on the page |
 | Forgot to start the timer | Type the minutes into **"Forgot the timer?"** and press **Add** |
 | Change your daily goal or game budget | Click the ⚙ gear (top right) |
+| Change your Discord or Steam keys | Click the **Discord** chip (top right), or ⚙ → *Edit Discord & Steam connections* |
 | See what your profile shows | Check the **On your profile** card. It mirrors your Discord card |
 
 **Modes** switch automatically:
@@ -123,7 +129,7 @@ Your profile card follows the mode, e.g. `in elden ring  ▰▰▰▱▱▱▱�
 
 1. Developer Portal → your app → **General Information → App Icon**: upload `public/img/logo.png`.
 2. **Rich Presence → Art Assets**: upload the same file and name it **`logo`**. New assets can take a few minutes to show up.
-3. Set `LARGE_IMAGE=logo` in `.env` and restart the app.
+3. Open the connections window (click the **Discord** chip), expand **Optional: Discord card image**, type `logo`, and click **Save & connect**. You can also set `LARGE_IMAGE=logo` in `.env`.
 
 `LARGE_IMAGE` can also be a direct `https://` image link. While you're in a game, the card shows that game's banner instead.
 
@@ -141,7 +147,11 @@ Your profile card follows the mode, e.g. `in elden ring  ▰▰▰▱▱▱▱�
 
 **The dashboard says "Demo mode"**
 
-The app reads `.env` only when it starts. Restart it (<kbd>Ctrl</kbd>+<kbd>C</kbd>, then `npm start`) after editing `.env`. Also check that all three values are filled in.
+Click the banner and finish the **Connect your accounts** steps. If you edited `.env` by hand instead, restart the app (<kbd>Ctrl</kbd>+<kbd>C</kbd>, then `npm start`), because `.env` is only read at startup.
+
+**"Steam rejected the API key"**
+
+Copy the key again from <https://steamcommunity.com/dev/apikey>. It's 32 characters, with no spaces.
 
 **"Played today" is 0 or wrong**
 

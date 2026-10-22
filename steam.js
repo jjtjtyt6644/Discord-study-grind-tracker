@@ -10,8 +10,31 @@ async function call(iface, method, version, params) {
   const url = new URL(`${API}/${iface}/${method}/${version}/`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (res.status === 401 || res.status === 403) throw new Error("Steam rejected the API key - double-check it");
   if (!res.ok) throw new Error(`Steam ${method} failed (${res.status})`);
   return res.json();
+}
+
+export const clearSteamCache = () => (cache = { at: 0, value: null });
+
+// Accepts a SteamID64, a /profiles/ link, a /id/ custom link, or a bare custom name.
+export async function resolveSteamId(input, key) {
+  input = String(input).trim();
+  const direct = input.match(/\b(7656\d{13})\b/);
+  if (direct) return direct[1];
+  const vanity = input.match(/steamcommunity\.com\/id\/([^/?#\s]+)/i)?.[1] ?? (/^[\w-]{2,32}$/.test(input) ? input : null);
+  if (!vanity) throw new Error("That doesn't look like a SteamID64 or a Steam profile link");
+  const r = await call("ISteamUser", "ResolveVanityURL", "v1", { key, vanityurl: vanity });
+  if (r.response.success !== 1) throw new Error(`Couldn't find a Steam profile called "${vanity}"`);
+  return r.response.steamid;
+}
+
+// Returns the profile name, or throws if the key/ID combo doesn't work.
+export async function verifySteam(key, steamid) {
+  const r = await call("ISteamUser", "GetPlayerSummaries", "v2", { key, steamids: steamid });
+  const p = r.response.players[0];
+  if (!p) throw new Error("The API key works, but no Steam profile matches that ID");
+  return p.personaname;
 }
 
 async function getAchievements(key, steamid, appid) {

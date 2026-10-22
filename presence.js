@@ -1,44 +1,55 @@
 // Discord Rich Presence: shows your study/play stats on your profile while Discord desktop is open.
+let Client = null;
 let client = null;
+let clientId = null;
 let connected = false;
 let enabled = false;
 let retry = null;
 let lastActivity = null;
 let lastSent = "";
 
-export async function startPresence(clientId) {
-  if (!clientId) return;
-  enabled = true;
-  let Client;
-  try {
-    ({ Client } = await import("@xhayper/discord-rpc"));
-  } catch {
-    console.warn("! Rich Presence disabled: run `npm install` first.");
-    enabled = false;
-    return;
+function scheduleReconnect() {
+  connected = false;
+  if (retry) return;
+  retry = setTimeout(() => {
+    retry = null;
+    connect();
+  }, 15_000);
+}
+
+function connect() {
+  client?.destroy().catch(() => {});
+  const c = new Client({ clientId });
+  client = c;
+  // a replaced client may still fire events; only the current one counts
+  c.on("ready", () => {
+    if (c !== client) return;
+    connected = true;
+    lastSent = "";
+    console.log("✓ Discord Rich Presence connected");
+    if (lastActivity) updatePresence(lastActivity);
+  });
+  c.on("disconnected", () => c === client && scheduleReconnect());
+  c.login().catch(() => c === client && scheduleReconnect());
+}
+
+// Safe to call again with a new ID (e.g. after setup in the dashboard).
+export async function startPresence(id) {
+  if (!id || id === clientId) return;
+  if (!Client) {
+    try {
+      ({ Client } = await import("@xhayper/discord-rpc"));
+    } catch {
+      console.warn("! Rich Presence disabled: run `npm install` first.");
+      return;
+    }
   }
-
-  const scheduleReconnect = () => {
-    connected = false;
-    if (retry) return;
-    retry = setTimeout(() => {
-      retry = null;
-      connect();
-    }, 15_000);
-  };
-
-  const connect = () => {
-    client?.destroy().catch(() => {});
-    client = new Client({ clientId });
-    client.on("ready", () => {
-      connected = true;
-      lastSent = "";
-      console.log("✓ Discord Rich Presence connected");
-      if (lastActivity) updatePresence(lastActivity);
-    });
-    client.on("disconnected", scheduleReconnect);
-    client.login().catch(scheduleReconnect);
-  };
+  clientId = id;
+  enabled = true;
+  connected = false;
+  lastSent = "";
+  clearTimeout(retry);
+  retry = null;
   connect();
 }
 

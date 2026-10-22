@@ -272,8 +272,9 @@ function render() {
 
   const notes = [];
   if (steamError) notes.push(`Steam: ${steamError}`);
-  if (steam?.demo) notes.push("Demo mode: add your Steam key and SteamID to .env to see your real stats.");
+  if (!stats.config.complete) notes.push("Demo mode: click here to connect your Steam & Discord.");
   showNotice(notes.join("  ·  "));
+  $("watermark").textContent = `${$("modeLabel").textContent} · ${$("modeLabel").textContent}`;
 
   // hero side
   const playMin = played.todayMinutes;
@@ -293,6 +294,8 @@ function render() {
   if (JSON.stringify(steam?.recent) !== renderGames.last) renderGames(steam?.recent ?? []);
   renderWeek(study.week, study.goalMinutes);
   renderDiscord(discord);
+  renderMarquee();
+  maybeOpenSetup();
 }
 
 function renderSteam(steam) {
@@ -468,6 +471,27 @@ function renderDiscord(d) {
   }
 }
 
+function renderMarquee() {
+  const { study, played, steam } = stats;
+  const items = [
+    `${hm(liveStudyMs() / 60000)} studied`,
+    `${hm(played.todayMinutes)} played`,
+    $("streak").textContent,
+    `goal ${hm(study.goalMinutes)}`,
+    steam && `steam lvl ${steam.profile.level ?? "?"}`,
+    steam && `${steam.ownedCount} games`,
+    steam?.profile.currentGame ? `now playing ${steam.profile.currentGame.name}` : "stay locked in",
+  ].filter(Boolean);
+  const sig = items.join("|");
+  const track = $("marquee");
+  if (track.dataset.sig === sig) return; // rebuilding restarts the scroll, so only on real changes
+  track.dataset.sig = sig;
+  // two copies back to back make the -50% loop seamless
+  const nodes = [];
+  for (let copy = 0; copy < 2; copy++) for (const t of items) nodes.push(el("span", null, t), el("span", null, "✦"));
+  track.replaceChildren(...nodes);
+}
+
 /* ================= live ticking ================= */
 function renderTimer(text, idle) {
   const timer = $("timer");
@@ -550,7 +574,7 @@ async function toggleStudy(e) {
 }
 $("studyBtn").addEventListener("click", toggleStudy);
 addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.repeat || $("settings").open) return;
+  if (e.code !== "Space" || e.repeat || $("settings").open || setup.open) return;
   if (["INPUT", "BUTTON", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
   e.preventDefault();
   toggleStudy();
@@ -565,6 +589,91 @@ $("addForm").addEventListener("submit", async (e) => {
   } catch (err) {
     showNotice(err.message);
   }
+});
+
+/* ================= setup wizard ================= */
+const setup = $("setup");
+const store = {
+  get: (k) => {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  set: (k, v) => {
+    try {
+      localStorage.setItem(k, v);
+    } catch {}
+  },
+};
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove("show"), 3500);
+}
+
+function openSetup() {
+  const c = stats?.config ?? {};
+  const state = (id, ok, text) => {
+    $(id).className = "state " + (ok ? "ok" : "missing");
+    $(id).textContent = ok ? `✓ ${text}` : "not set";
+  };
+  state("stDiscord", c.discordClientId, "connected");
+  state("stKey", c.steamApiKey, `saved ${c.steamApiKey?.slice(-4) ?? ""}`);
+  state("stId", c.steamId, "connected");
+  // saved values show as placeholders; leaving a field blank keeps what's saved
+  $("inDiscord").placeholder = c.discordClientId || "e.g. 123456789012345678";
+  $("inKey").placeholder = c.steamApiKey ? `saved (${c.steamApiKey}) - leave blank to keep` : "32-character key";
+  $("inId").placeholder = c.steamId || "https://steamcommunity.com/id/yourname or 7656119…";
+  $("inImage").value = c.largeImage || "";
+  $("setupError").textContent = "";
+  $("setupSkip").textContent = c.complete ? "Close" : "Use demo data for now";
+  if (!setup.open) setup.showModal();
+}
+
+function maybeOpenSetup() {
+  if (maybeOpenSetup.done) return;
+  maybeOpenSetup.done = true;
+  if (!stats.config.complete && store.get("gt-setup-skipped") !== "1") openSetup();
+}
+
+$("setupSkip").addEventListener("click", () => {
+  store.set("gt-setup-skipped", "1");
+  setup.close();
+});
+$("setupForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("setupSave");
+  btn.disabled = true;
+  btn.textContent = "Checking with Steam…";
+  $("setupError").textContent = "";
+  try {
+    const out = await api("/api/config", {
+      discordClientId: $("inDiscord").value,
+      steamApiKey: $("inKey").value,
+      steamId: $("inId").value,
+      largeImage: $("inImage").value,
+    });
+    for (const id of ["inDiscord", "inKey", "inId"]) $(id).value = "";
+    apply(out);
+    setup.close();
+    toast(out.result?.steamName ? `Connected as ${out.result.steamName}` : "Saved");
+  } catch (err) {
+    $("setupError").textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Save & connect";
+  }
+});
+$("discordChip").addEventListener("click", openSetup);
+$("notice").addEventListener("click", openSetup);
+$("openSetup").addEventListener("click", () => {
+  $("settings").close();
+  openSetup();
 });
 
 const dialog = $("settings");
