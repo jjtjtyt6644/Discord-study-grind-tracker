@@ -16,12 +16,16 @@ locked in · math  ▰▰▰▰▰▱▱▱▱▱  52%
 
 - **Study timer**: start/stop with one click or the <kbd>Space</kbd> key. You can also add minutes you forgot to track.
 - **Played today**: pulled from Steam automatically, including the game you're in right now.
-- **Steam stats**: profile, level, current game, recently played, games owned, lifetime hours, and achievement progress.
+- **Steam stats**: profile, level, current game, recently played, games owned and lifetime hours.
+- **Steam achievements**: completion for your current game, your **rarest unlock** (with the % of all players who have it), your latest unlocks, and the **easiest achievements to get next**.
 - **Discord Rich Presence**: your profile updates every 15 seconds with study time, play time and a goal progress bar.
 - **XP, levels & ranks**: earn 1 XP per minute studied, plus a bonus every day you hit your goal. Rank up from Rookie → Apprentice → Scholar → Strategist → Sage → Mastermind → Legend, with a full-screen LEVEL UP animation. Your level shows on your Discord card.
-- **Badges**: 11 to unlock, including First Blood, On Fire (3-day streak), Unstoppable (7 days), Marathon (2h session), Night Owl, Early Bird, Goal Crusher, Budget Keeper, Polymath, the Ten-Hour Club and Centurion. Your past history counts too.
-- **Subjects**: tag sessions as Math, Coding or your own subjects, and see a breakdown for today and the week. Switching subjects mid-session splits the time correctly. Your current subject shows on Discord (`locked in · math`).
+- **18 badges** across Start, Streak, Focus, Habit, Goal, Balance, Subject and Total. Each one shows what it's for and how close you are. Filter by unlocked or locked. Your past history counts too.
+- **Subjects**: tag sessions as Math, Coding or your own subjects. Pick one from the chips above the timer, from the Subjects card, or with keys <kbd>1</kbd>–<kbd>9</kbd>. See a breakdown for today and the week. Switching subjects mid-session splits the time correctly. Your current subject shows on Discord (`locked in · math`).
 - **Year heatmap**: a GitHub-style grid of every day you studied this year, with totals, active days and your best day.
+- **Today's log**: every session and added block of time, with delete (fix a timer left running) and a **CSV export** of your full history.
+- **Quality of life**: the live timer shows in the browser tab title, keyboard shortcuts (<kbd>?</kbd> lists them), and a "Still studying?" check after 3 hours so a forgotten timer can't inflate your stats.
+- **Guide & About pages**: a built-in manual at `/guide.html` (with the live rank table and badge list) and an About page.
 - **Daily goal + game budget**: segmented progress bars, a 7-day chart, a streak counter, and confetti when you hit your goal.
 - **Dashboard**: moving aurora background, a character panel with mode-reactive tint and speech bubbles, and color themes per mode (purple = studying, red = gaming, blue = on break).
 
@@ -41,24 +45,22 @@ cd Discord-study-grind-tracker
 npm install
 ```
 
-### 2. Add your art (optional)
+### 2. Art (optional)
 
-Put two images in `public/img/`:
+The dashboard comes with **Reze** art and a matching neon logo already set up. Want your own? Replace the images in `public/img/`:
 
 | File | What it's for | Tips |
 | --- | --- | --- |
-| `bg.jpg` | The character panel on the right of the dashboard | A tall (portrait) image works best |
+| `bg.jpg` | The character panel on the right of the dashboard (and the About page) | A tall (portrait) image works best |
 | `logo-source.jpg` | Source for your logo | Square, with the face near the center |
 
-Then build the logo:
+Then rebuild the logo:
 
 ```bash
 npm run logo
 ```
 
-This creates `public/img/logo.png` (1024×1024, with a neon ring). If the face isn't centered, adjust `crop` in `scripts/make-logo.mjs` and run it again.
-
-No art? The dashboard still works. It just hides the character panel.
+This creates `public/img/logo.png` (1024×1024, for Discord) and `logo-small.png` (used in the page header and browser tab). If the face isn't centered, adjust `crop` in `scripts/make-logo.mjs` and run it again.
 
 ### 3. Start it
 
@@ -114,7 +116,10 @@ Within about 15 seconds of connecting, your Discord profile shows the activity c
 | Do this | How |
 | --- | --- |
 | Start / stop studying | Click **Start studying**, or press <kbd>Space</kbd> anywhere on the page |
-| Tag what you're studying | Click a subject chip above the timer (click it again to clear). Add or remove subjects in the **Subjects** card |
+| Tag what you're studying | Click a subject chip above the timer, a row in the **Subjects** card, or press <kbd>1</kbd>–<kbd>9</kbd> (again to clear). Add or remove subjects in the **Subjects** card |
+| Fix a mistake | In **Today's log**, click **×** and then **Delete?** on the entry |
+| Back up your history | **Export CSV** in Today's log, or ⚙ → *Download my study history* |
+| Learn everything | Open **Guide** (top of the dashboard) or press <kbd>?</kbd> for shortcuts |
 | Forgot to start the timer | Type the minutes into **"Forgot the timer?"** and press **Add** |
 | Change your daily goal or game budget | Click the ⚙ gear (top right) |
 | Change your Discord or Steam keys | Click the **Discord** chip (top right), or ⚙ → *Edit Discord & Steam connections* |
@@ -174,6 +179,10 @@ The "Playing …" name comes from your app's name in the Developer Portal. The t
 
 ---
 
+## Credits
+
+Reze is a character from *Chainsaw Man* by Tatsuki Fujimoto. The default artwork is fan art found on Pinterest, and all rights belong to its original artists. Replace it with your own in `public/img/` any time.
+
 ## How it works
 
 | File | Job |
@@ -182,7 +191,7 @@ The "Playing …" name comes from your app's name in the Developer Portal. The t
 | `steam.js` | Steam Web API calls, cached for 45 seconds. Demo data when no key is set |
 | `presence.js` | Builds the Discord activity text and keeps the Rich Presence connection alive |
 | `progress.js` | XP, levels, ranks and badges, all calculated from your study history |
-| `public/` | The dashboard (`index.html`, `style.css`, `app.js`) and your art in `public/img/` |
+| `public/` | The dashboard (`index.html`, `app.js`), the Guide and About pages (`guide.html`, `about.html`, `pages.js`), the shared background (`bg.js`), styles, and art in `public/img/` |
 | `scripts/make-logo.mjs` | Turns `logo-source.jpg` into the round neon logo |
 | `data.json` | Your study history (created automatically, not committed) |
 

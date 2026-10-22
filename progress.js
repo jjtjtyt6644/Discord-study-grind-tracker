@@ -18,18 +18,26 @@ const xpAt = (level) => 50 * level * (level + 1);
 const levelFromXp = (xp) => Math.floor((-1 + Math.sqrt(1 + (4 * xp) / 50)) / 2);
 const rankFor = (level) => RANKS.filter(([min]) => level >= min).at(-1)[1];
 
+// cat groups badges in the UI; need/have drive the progress bar
 const BADGES = [
-  { id: "first", name: "First Blood", icon: "01", desc: "Finish your first study session", need: 1, have: (s) => s.sessionCount },
-  { id: "streak3", name: "On Fire", icon: "3D", desc: "Study 3 days in a row", need: 3, have: (s) => s.bestStreak },
-  { id: "streak7", name: "Unstoppable", icon: "7D", desc: "Study 7 days in a row", need: 7, have: (s) => s.bestStreak },
-  { id: "marathon", name: "Marathon", icon: "2H", desc: "One session of 2+ hours", need: 120, have: (s) => s.longestMin },
-  { id: "owl", name: "Night Owl", icon: "☾", desc: "Study past midnight", need: 1, have: (s) => +s.night },
-  { id: "bird", name: "Early Bird", icon: "◐", desc: "Start a session before 7am", need: 1, have: (s) => +s.early },
-  { id: "goal5", name: "Goal Crusher", icon: "◎", desc: "Hit your daily goal on 5 days", need: 5, have: (s) => s.goalDays },
-  { id: "budget", name: "Budget Keeper", icon: "≤", desc: "Hit your goal and stay under your game budget the same day", need: 1, have: (s) => +s.budgetDay },
-  { id: "polymath", name: "Polymath", icon: "✦", desc: "Study 3 different subjects in one day", need: 3, have: (s) => s.maxSubjectsDay },
-  { id: "ten", name: "Ten-Hour Club", icon: "10", desc: "Study 10 hours in total", need: 600, have: (s) => s.totalMin },
-  { id: "hundred", name: "Centurion", icon: "C", desc: "Study 100 hours in total", need: 6000, have: (s) => s.totalMin },
+  { id: "first", cat: "Start", name: "First Blood", icon: "01", desc: "Finish your very first study session.", need: 1, have: (s) => s.sessionCount },
+  { id: "streak3", cat: "Streak", name: "On Fire", icon: "3D", desc: "Study at least a little on 3 days in a row.", need: 3, have: (s) => s.bestStreak },
+  { id: "streak7", cat: "Streak", name: "Unstoppable", icon: "7D", desc: "Keep a 7-day study streak alive.", need: 7, have: (s) => s.bestStreak },
+  { id: "streak30", cat: "Streak", name: "Iron Will", icon: "30", desc: "A full month: study 30 days in a row.", need: 30, have: (s) => s.bestStreak },
+  { id: "perfect", cat: "Streak", name: "Perfect Week", icon: "7G", desc: "Hit your daily goal 7 days in a row.", need: 7, have: (s) => s.bestGoalStreak },
+  { id: "comeback", cat: "Streak", name: "Comeback", icon: "↺", desc: "Get back to studying after 3+ days off. Everyone falls off sometimes.", need: 1, have: (s) => +s.comeback },
+  { id: "marathon", cat: "Focus", name: "Marathon", icon: "2H", desc: "Stay locked in for one session of 2 hours or more.", need: 120, have: (s) => s.longestMin },
+  { id: "deep", cat: "Focus", name: "Deep Focus", icon: "3×", desc: "Do three 45-minute (or longer) sessions in a single day.", need: 3, have: (s) => s.deepDayMax },
+  { id: "owl", cat: "Habit", name: "Night Owl", icon: "☾", desc: "Study past midnight (a session that starts after 11pm or crosses midnight).", need: 1, have: (s) => +s.night },
+  { id: "bird", cat: "Habit", name: "Early Bird", icon: "◐", desc: "Start a session between 4am and 7am.", need: 1, have: (s) => +s.early },
+  { id: "weekend", cat: "Habit", name: "Weekend Warrior", icon: "SS", desc: "Study on both Saturday and Sunday of the same weekend.", need: 1, have: (s) => +s.weekend },
+  { id: "goal5", cat: "Goal", name: "Goal Crusher", icon: "◎", desc: "Hit your daily study goal on 5 different days.", need: 5, have: (s) => s.goalDays },
+  { id: "budget", cat: "Balance", name: "Budget Keeper", icon: "≤", desc: "Hit your study goal and stay under your game budget on the same day.", need: 1, have: (s) => +s.budgetDay },
+  { id: "balanced", cat: "Balance", name: "Balanced", icon: "⇌", desc: "Study more than you game on 7 days (needs Steam connected).", need: 7, have: (s) => s.balancedDays },
+  { id: "polymath", cat: "Subject", name: "Polymath", icon: "✦", desc: "Study 3 different subjects in one day.", need: 3, have: (s) => s.maxSubjectsDay },
+  { id: "specialist", cat: "Subject", name: "Specialist", icon: "S", desc: "Put 10 hours into a single subject.", need: 600, have: (s) => s.maxSubjectMin },
+  { id: "ten", cat: "Total", name: "Ten-Hour Club", icon: "10", desc: "Study 10 hours in total.", need: 600, have: (s) => s.totalMin },
+  { id: "hundred", cat: "Total", name: "Centurion", icon: "C", desc: "Study 100 hours in total. Legendary dedication.", need: 6000, have: (s) => s.totalMin },
 ];
 
 /**
@@ -49,7 +57,12 @@ export function computeProgress(data, studyMin, dayKey) {
   if (!keys.includes(today)) keys.push(today);
   keys.sort();
 
-  const s = { sessionCount: sessions.length, totalMin: 0, goalDays: 0, bestStreak: 0, longestMin: 0, night: false, early: false, budgetDay: false, maxSubjectsDay: 0 };
+  const s = {
+    sessionCount: sessions.length, totalMin: 0, goalDays: 0, bestStreak: 0, bestGoalStreak: 0, longestMin: 0,
+    night: false, early: false, weekend: false, comeback: false, budgetDay: false,
+    maxSubjectsDay: 0, maxSubjectMin: 0, deepDayMax: 0, balancedDays: 0,
+  };
+  const subjectMin = {};
 
   for (const k of keys) {
     const min = studyMin(k);
@@ -57,6 +70,11 @@ export function computeProgress(data, studyMin, dayKey) {
     if (min >= goal) s.goalDays++;
     const played = days[k]?.playedMinutes;
     if (min >= goal && played != null && played <= settings.playBudgetMinutes) s.budgetDay = true;
+    if (min > 0 && played != null && min > played) s.balancedDays++;
+    for (const x of days[k]?.sessions ?? []) if (x.subject) subjectMin[x.subject] = (subjectMin[x.subject] ?? 0) + (x.end - x.start) / 60_000;
+    for (const [sub, m] of Object.entries(days[k]?.manualBySubject ?? {})) subjectMin[sub] = (subjectMin[sub] ?? 0) + m;
+    const daySessions = [...(days[k]?.sessions ?? []), ...(k === today && data.activeStudy ? [{ start: data.activeStudy, end: Date.now() }] : [])];
+    s.deepDayMax = Math.max(s.deepDayMax, daySessions.filter((x) => x.end - x.start >= 45 * 60_000).length);
     const subjects = new Set([
       ...(days[k]?.sessions ?? []).map((x) => x.subject),
       ...Object.keys(days[k]?.manualBySubject ?? {}),
@@ -67,12 +85,29 @@ export function computeProgress(data, studyMin, dayKey) {
     s.maxSubjectsDay = Math.max(s.maxSubjectsDay, subjects.size);
   }
 
-  // longest run of consecutive calendar days with any study
+  if (data.activeStudy && data.activeSubject) subjectMin[data.activeSubject] = (subjectMin[data.activeSubject] ?? 0) + (Date.now() - data.activeStudy) / 60_000;
+  s.maxSubjectMin = Math.max(0, ...Object.values(subjectMin));
+
+  // walk every calendar day: streaks, goal streaks, comebacks, weekends
   let run = 0;
+  let goalRun = 0;
+  let gap = 0;
+  let studiedBefore = false;
+  let saturday = false;
   const cursor = new Date(`${keys[0]}T12:00`);
   for (const end = new Date(`${today}T12:00`); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
-    run = studyMin(dayKey(cursor)) > 0 ? run + 1 : 0;
+    const min = studyMin(dayKey(cursor));
+    run = min > 0 ? run + 1 : 0;
+    goalRun = min >= goal ? goalRun + 1 : 0;
     s.bestStreak = Math.max(s.bestStreak, run);
+    s.bestGoalStreak = Math.max(s.bestGoalStreak, goalRun);
+    if (min > 0) {
+      if (studiedBefore && gap >= 3) s.comeback = true;
+      studiedBefore = true;
+      gap = 0;
+    } else gap++;
+    if (cursor.getDay() === 6) saturday = min > 0;
+    if (cursor.getDay() === 0 && saturday && min > 0) s.weekend = true;
   }
 
   for (const x of sessions) {
@@ -93,9 +128,11 @@ export function computeProgress(data, studyMin, dayKey) {
     levelXp: xpAt(level),
     nextXp: xpAt(level + 1),
     nextRank: next ? { level: next[0], name: next[1] } : null,
+    // the rules, so the Guide page explains exactly what the code does
+    rules: { xpPerMinute: 1, xpPerGoalDay: XP_PER_GOAL_DAY, ranks: RANKS.map(([level, name]) => ({ level, name, xp: xpAt(level) })) },
     badges: BADGES.map((b) => {
       const have = Math.min(b.need, Math.floor(b.have(s)));
-      return { id: b.id, name: b.name, icon: b.icon, desc: b.desc, unlocked: have >= b.need, have, need: b.need };
+      return { id: b.id, cat: b.cat, name: b.name, icon: b.icon, desc: b.desc, unlocked: have >= b.need, have, need: b.need };
     }),
   };
 }

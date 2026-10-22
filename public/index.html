@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grind Tracker</title>
-  <link rel="icon" href="img/logo.png">
+  <link rel="icon" href="img/logo-small.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -30,10 +30,14 @@
   <main class="content">
     <header class="top">
       <div class="brand">
-        <img class="logo" id="logo" src="img/logo.png" alt="">
+        <img class="logo" id="logo" src="img/logo-small.png" alt="">
         <span>GRIND<b>//</b>TRACKER</span>
         <a class="lvl-pill" id="lvlPill" href="#rank" title="Your rank">LV 0</a>
       </div>
+      <nav class="nav">
+        <a href="guide.html">Guide</a>
+        <a href="about.html">About</a>
+      </nav>
       <div class="top-right">
         <button class="chip" id="discordChip" title="Connections"><i class="dot"></i><span>Discord</span></button>
         <span class="clock" id="clock">--:--</span>
@@ -117,7 +121,16 @@
             <div class="xpline"><span id="xpNow">0 XP</span><span id="xpNext"></span></div>
             <div class="xpbar"><i id="xpFill"></i></div>
             <div class="next-rank" id="nextRank"></div>
+            <p class="xp-rule">1 XP per minute studied · +60 XP every day you hit your goal · <a href="guide.html#xp">how ranks work →</a></p>
           </div>
+        </div>
+        <div class="badge-head">
+          <span class="badge-count" id="badgeCount"></span>
+          <span class="tabs" id="badgeTabs" role="tablist">
+            <button type="button" class="on" data-f="all">All</button>
+            <button type="button" data-f="unlocked">Unlocked</button>
+            <button type="button" data-f="locked">Locked</button>
+          </span>
         </div>
         <div class="badges" id="badges"></div>
       </article>
@@ -132,6 +145,7 @@
         </h2>
         <div class="stack" id="subjStack"></div>
         <ul class="legend" id="subjLegend"></ul>
+        <p class="hint subj-hint">Click a subject to study it next · or press <kbd>1</kbd>–<kbd>9</kbd></p>
         <form class="add" id="subjForm">
           <input id="subjIn" maxlength="24" placeholder="Add a subject" required>
           <button type="submit">Add</button>
@@ -144,28 +158,15 @@
         <div id="achBody" class="ach"><p class="muted">No achievement data yet.</p></div>
       </article>
 
-      <!-- year heatmap -->
-      <article class="card c-heat">
-        <h2><span>06</span>Year in grind</h2>
-        <div class="heat-scroll">
-          <div class="heat-months" id="heatMonths"></div>
-          <div class="heat" id="heat"></div>
-        </div>
-        <div class="heat-foot">
-          <span id="heatTotal"></span>
-          <span class="heat-legend">less <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> more</span>
-        </div>
-      </article>
-
-      <!-- week -->
-      <article class="card c-week">
-        <h2><span>07</span>Last 7 days</h2>
-        <div class="chart" id="chart"><div class="goal-line" id="goalLine"><span>goal</span></div></div>
+      <!-- today's log -->
+      <article class="card c-log">
+        <h2><span>06</span>Today's log <a class="h2-link" href="/api/export.csv" download>Export CSV ↓</a></h2>
+        <ul class="log" id="log"></ul>
       </article>
 
       <!-- discord -->
       <article class="card c-discord">
-        <h2><span>08</span>On your profile</h2>
+        <h2><span>07</span>On your profile</h2>
         <div class="dc">
           <div class="dc-head">Playing</div>
           <div class="dc-row">
@@ -181,9 +182,28 @@
         <p class="hint" id="dcHint"></p>
       </article>
 
+      <!-- year heatmap -->
+      <article class="card c-heat">
+        <h2><span>08</span>Year in grind</h2>
+        <div class="heat-scroll">
+          <div class="heat-months" id="heatMonths"></div>
+          <div class="heat" id="heat"></div>
+        </div>
+        <div class="heat-foot">
+          <span id="heatTotal"></span>
+          <span class="heat-legend">less <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> more</span>
+        </div>
+      </article>
+
+      <!-- week -->
+      <article class="card c-week">
+        <h2><span>09</span>Last 7 days</h2>
+        <div class="chart" id="chart"><div class="goal-line" id="goalLine"><span>goal</span></div></div>
+      </article>
+
       <!-- recent -->
       <article class="card c-games">
-        <h2><span>09</span>Recently played</h2>
+        <h2><span>10</span>Recently played</h2>
         <div class="strip" id="strip"></div>
       </article>
     </section>
@@ -237,7 +257,7 @@
 
       <details class="advanced">
         <summary>Optional: Discord card image</summary>
-        <p>Upload <code>public/img/logo.png</code> under <b>Rich Presence → Art Assets</b> in the Developer Portal with the name <code>logo</code>, then type <code>logo</code> here. A direct <code>https://</code> image link works too.</p>
+        <p>Upload <code>public/img/logo-small.png</code> under <b>Rich Presence → Art Assets</b> in the Developer Portal with the name <code>logo</code>, then type <code>logo</code> here. A direct <code>https://</code> image link works too.</p>
         <input id="inImage" autocomplete="off" placeholder="logo">
       </details>
 
@@ -257,9 +277,39 @@
       <label>Daily study goal <span><input type="number" id="goalIn" min="15" max="1440" step="15"> min</span></label>
       <label>Game time budget <span><input type="number" id="budgetIn" min="15" max="1440" step="15"> min</span></label>
       <button type="button" class="link-btn" id="openSetup">Edit Discord &amp; Steam connections →</button>
+      <a class="link-btn" href="/api/export.csv" download>Download my study history (CSV) ↓</a>
+      <p class="muted small">Tip: press <kbd>?</kbd> on the dashboard to see keyboard shortcuts.</p>
       <div class="dialog-actions">
         <button value="cancel" formnovalidate class="ghost">Cancel</button>
         <button value="save" class="solid">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- keyboard shortcuts -->
+  <dialog id="help">
+    <form method="dialog">
+      <h2><span>?</span>Keyboard shortcuts</h2>
+      <dl class="keys">
+        <div><dt><kbd>Space</kbd></dt><dd>Start / stop studying</dd></div>
+        <div><dt><kbd>1</kbd> – <kbd>9</kbd></dt><dd>Pick a subject (press again to clear)</dd></div>
+        <div><dt><kbd>A</kbd></dt><dd>Add minutes you forgot to track</dd></div>
+        <div><dt><kbd>G</kbd></dt><dd>Goals &amp; settings</dd></div>
+        <div><dt><kbd>C</kbd></dt><dd>Discord &amp; Steam connections</dd></div>
+        <div><dt><kbd>?</kbd></dt><dd>This list</dd></div>
+      </dl>
+      <div class="dialog-actions"><button class="solid">Got it</button></div>
+    </form>
+  </dialog>
+
+  <!-- long-session check -->
+  <dialog id="still">
+    <form method="dialog">
+      <h2><span>!</span>Still studying?</h2>
+      <p class="still-txt">Your session has been running for <b id="stillFor">3h</b>. If you forgot to stop the timer, end it now so your stats stay honest.</p>
+      <div class="dialog-actions">
+        <button value="end" class="ghost">End session</button>
+        <button value="keep" class="solid">Still here</button>
       </div>
     </form>
   </dialog>
@@ -274,6 +324,7 @@
     </div>
   </div>
 
+  <script src="bg.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

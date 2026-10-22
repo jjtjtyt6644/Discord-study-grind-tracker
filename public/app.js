@@ -22,151 +22,6 @@ function el(tag, cls, text) {
   return e;
 }
 
-/* ================= animated background ================= */
-const BG = (() => {
-  const c = $("bg");
-  const ctx = c.getContext("2d");
-  const themes = {
-    idle: [[139, 156, 255], [196, 181, 253], [40, 46, 120]],
-    study: [[183, 148, 255], [94, 234, 212], [76, 29, 149]],
-    gaming: [[255, 107, 139], [255, 180, 84], [136, 19, 55]],
-  };
-  const cur = themes.idle.map((col) => [...col]);
-  let target = themes.idle;
-  let w, h;
-  const mouse = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5 };
-  const stars = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), z: Math.random() * 0.9 + 0.1, tw: Math.random() * 6.28 }));
-  const shooters = [];
-  const sparks = [];
-  const artFrame = $("artFrame");
-
-  function resize() {
-    const dpr = Math.min(devicePixelRatio || 1, 2);
-    w = innerWidth;
-    h = innerHeight;
-    c.width = w * dpr;
-    c.height = h * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (reduceMotion) frame(0);
-  }
-  addEventListener("resize", resize);
-  addEventListener("pointermove", (e) => {
-    mouse.tx = e.clientX / w;
-    mouse.ty = e.clientY / h;
-    if (!reduceMotion) {
-      artFrame.style.setProperty("--px", `${(mouse.tx - 0.5) * -18}px`);
-      artFrame.style.setProperty("--py", `${(mouse.ty - 0.5) * -10}px`);
-    }
-  });
-  const rgba = (col, a) => `rgba(${col[0] | 0},${col[1] | 0},${col[2] | 0},${a})`;
-
-  function frame(ms) {
-    const t = ms / 1000;
-    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) cur[i][j] += (target[i][j] - cur[i][j]) * 0.025;
-    mouse.x += (mouse.tx - mouse.x) * 0.05;
-    mouse.y += (mouse.ty - mouse.y) * 0.05;
-
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "#07080f";
-    ctx.fillRect(0, 0, w, h);
-    ctx.globalCompositeOperation = "lighter";
-
-    const big = Math.max(w, h);
-    const blobs = [
-      [0.15 + 0.1 * Math.sin(t * 0.11), 0.2 + 0.1 * Math.cos(t * 0.15), 0.5, cur[0], 0.12],
-      [0.55 + 0.12 * Math.cos(t * 0.09), 0.75 + 0.1 * Math.sin(t * 0.08), 0.55, cur[2], 0.22],
-      [0.85, 0.3 + 0.1 * Math.sin(t * 0.1), 0.45, cur[1], 0.08],
-    ];
-    for (const [bx, by, r, col, a] of blobs) {
-      const g = ctx.createRadialGradient(bx * w, by * h, 0, bx * w, by * h, r * big);
-      g.addColorStop(0, rgba(col, a));
-      g.addColorStop(1, rgba(col, 0));
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
-    }
-
-    // two faint aurora ribbons
-    for (let k = 0; k < 2; k++) {
-      ctx.beginPath();
-      for (let x = -40; x <= w + 40; x += 24) {
-        const y = h * (0.62 + k * 0.05) + Math.sin(x * 0.003 + t * 0.3 + k * 1.7) * h * 0.06 + Math.sin(x * 0.009 - t * 0.4) * h * 0.015;
-        x === -40 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.strokeStyle = rgba(cur[k], 0.035);
-      ctx.lineWidth = 70 + k * 40;
-      ctx.stroke();
-    }
-
-    for (const s of stars) {
-      if (!reduceMotion) s.x = (s.x + 0.00002 * s.z) % 1;
-      const px = s.x * w + (mouse.x - 0.5) * -30 * s.z;
-      const py = s.y * h + (mouse.y - 0.5) * -30 * s.z;
-      const a = 0.2 + 0.6 * Math.abs(Math.sin(t * s.z * 1.4 + s.tw));
-      ctx.fillStyle = `rgba(255,255,255,${a * s.z})`;
-      ctx.beginPath();
-      ctx.arc(px, py, s.z * 1.3, 0, 6.283);
-      ctx.fill();
-    }
-
-    if (!reduceMotion && Math.random() < 0.004) {
-      shooters.push({ x: Math.random() * w * 0.7, y: Math.random() * h * 0.4, vx: -(6 + Math.random() * 5), vy: 2.5 + Math.random() * 2.5, life: 1 });
-    }
-    for (let i = shooters.length - 1; i >= 0; i--) {
-      const s = shooters[i];
-      s.x += s.vx;
-      s.y += s.vy;
-      s.life -= 0.02;
-      const g = ctx.createLinearGradient(s.x, s.y, s.x - s.vx * 12, s.y - s.vy * 12);
-      g.addColorStop(0, `rgba(255,255,255,${s.life * 0.8})`);
-      g.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.strokeStyle = g;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x - s.vx * 12, s.y - s.vy * 12);
-      ctx.stroke();
-      if (s.life <= 0) shooters.splice(i, 1);
-    }
-
-    ctx.globalCompositeOperation = "source-over";
-    for (let i = sparks.length - 1; i >= 0; i--) {
-      const p = sparks[i];
-      p.vy += 0.12;
-      p.vx *= 0.99;
-      p.x += p.vx;
-      p.y += p.vy;
-      p.life -= 0.01;
-      ctx.fillStyle = rgba(p.col, Math.max(0, p.life));
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate((p.r += p.vr));
-      ctx.fillRect(-4, -2, 8, 4);
-      ctx.restore();
-      if (p.life <= 0) sparks.splice(i, 1);
-    }
-
-    if (!reduceMotion) requestAnimationFrame(frame);
-  }
-
-  resize();
-  if (!reduceMotion) requestAnimationFrame(frame);
-
-  return {
-    setMode(m) {
-      target = themes[m] ?? themes.idle;
-    },
-    burst(x, y) {
-      if (reduceMotion) return;
-      const palette = [...cur, [255, 255, 255]];
-      for (let i = 0; i < 150; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const v = 3 + Math.random() * 9;
-        sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 4, life: 1, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, col: palette[i % palette.length] });
-      }
-    },
-  };
-})();
-
 /* ================= character panel ================= */
 const LINES = {
   idle: ["on break? don't take too long.", "i'll wait. not forever though.", "hit start when you're ready."],
@@ -296,6 +151,7 @@ function render() {
   renderDiscord(discord);
   renderSubjectPick();
   renderSubjects();
+  renderLog();
   renderProgress();
   renderHeatmap();
   renderMarquee();
@@ -346,6 +202,31 @@ function renderSteam(steam) {
   now.replaceChildren(img, cap);
 }
 
+// rarity tiers by % of all Steam players who have the achievement
+const rarity = (pct) => (pct == null ? null : pct < 5 ? ["ultra", "Ultra rare"] : pct < 15 ? ["rare", "Rare"] : pct < 40 ? ["uncommon", "Uncommon"] : ["common", "Common"]);
+
+function achRow(x, note) {
+  const row = el("li", "arow");
+  const ic = el("div", "ic");
+  if (x.icon) {
+    const img = el("img");
+    img.src = x.icon;
+    img.alt = "";
+    img.loading = "lazy";
+    ic.append(img);
+  } else ic.textContent = x.time ? "★" : "?";
+  const txt = el("div", "atxt");
+  txt.append(el("b", null, x.name), el("small", null, x.desc || note || ""));
+  row.append(ic, txt);
+  const r = rarity(x.pct);
+  if (r) {
+    const pill = el("span", `pill ${r[0]}`, `${x.pct.toFixed(1)}%`);
+    pill.title = `${r[1]}: ${x.pct.toFixed(1)}% of players have this`;
+    row.append(pill);
+  }
+  return row;
+}
+
 function renderAchievements(a) {
   const body = $("achBody");
   const sig = JSON.stringify(a);
@@ -363,19 +244,26 @@ function renderAchievements(a) {
   body.replaceChildren(el("div", "game", a.game), count, bar, meta);
   setTimeout(() => (fill.style.width = `${(a.unlocked / a.total) * 100}%`), 60);
 
-  if (a.latest) {
-    const row = el("div", "latest");
-    const ic = el("div", "ic");
-    if (a.latest.icon) {
-      const img = el("img");
-      img.src = a.latest.icon;
-      img.alt = "";
-      ic.append(img);
-    } else ic.textContent = "★";
+  if (a.rarest) {
+    const r = rarity(a.rarest.pct);
+    const flex = el("div", `rarest ${r?.[0] ?? ""}`);
     const txt = el("div");
-    txt.append(el("small", null, `Latest unlock · ${ago(a.latest.time)}`), el("b", null, a.latest.name));
-    row.append(ic, txt);
-    body.append(row);
+    txt.append(el("small", null, "Rarest unlock"), el("b", null, a.rarest.name));
+    flex.append(txt, el("span", "rarest-pct", `${a.rarest.pct.toFixed(1)}%`), el("span", "rarest-tier", `${r[1]} · only ${a.rarest.pct.toFixed(1)}% of players`));
+    body.append(flex);
+  }
+
+  const recent = a.recent ?? (a.latest ? [a.latest] : []);
+  if (recent.length) {
+    const list = el("ul", "alist");
+    recent.forEach((x) => list.append(achRow(x)));
+    list.querySelectorAll("small").forEach((sm, i) => (sm.textContent = `${ago(recent[i].time)}${recent[i].desc ? ` · ${recent[i].desc}` : ""}`));
+    body.append(el("div", "asub", "Recent unlocks"), list);
+  }
+  if (a.next?.length) {
+    const list = el("ul", "alist next");
+    a.next.forEach((x) => list.append(achRow(x, "Locked")));
+    body.append(el("div", "asub", "Easiest to get next"), list);
   }
 }
 
@@ -456,13 +344,13 @@ function renderDiscord(d) {
     ? "Live on your profile · refreshes every 15s"
     : d.enabled
       ? "Open the Discord desktop app and it'll connect automatically."
-      : "Set DISCORD_CLIENT_ID in .env to show this on your profile.";
+      : "Click the Discord chip (top right) to connect your profile.";
 
   const a = d.activity;
   $("dcDetails").textContent = a.details;
   $("dcState").textContent = a.state;
   const img = $("dcImg");
-  const src = a.largeImageKey?.startsWith("http") ? a.largeImageKey : a.largeImageKey ? "img/logo.png" : null;
+  const src = a.largeImageKey?.startsWith("http") ? a.largeImageKey : a.largeImageKey ? "img/logo-small.png" : null;
   if (img.dataset.src !== (src ?? "")) {
     img.dataset.src = src ?? "";
     img.replaceChildren();
@@ -505,6 +393,7 @@ function renderSubjectPick() {
       b.setAttribute("role", "radio");
       b.setAttribute("aria-checked", String(name === active));
       b.style.setProperty("--c", colorFor(name));
+      if (list.indexOf(name) < 9) b.title = `Shortcut: ${list.indexOf(name) + 1}`;
       // clicking the active subject again clears it
       b.addEventListener("click", () => setSubject(name === active ? null : name));
       return b;
@@ -529,17 +418,27 @@ function renderSubjects() {
   );
 
   const legend = $("subjLegend");
-  const sig = JSON.stringify([rows, subjRange]);
+  const active = stats.study.subject;
+  const sig = JSON.stringify([rows, subjRange, active]);
   if (legend.dataset.sig === sig) return;
   legend.dataset.sig = sig;
   if (!rows.length) return legend.replaceChildren(el("li", "empty", "Add a subject below to start tagging sessions."));
   legend.replaceChildren(
     ...rows.map(([n, m]) => {
-      const li = el("li");
+      const pickable = stats.subjects.list.includes(n);
+      const li = el("li", (pickable ? "pick" : "") + (n === active ? " active" : ""));
       const sw = el("span", "sw");
       sw.style.background = colorFor(n);
-      li.append(sw, el("span", "nm", n), el("span", "mn", hm(m)), el("span", "pc", total ? `${Math.round((m / total) * 100)}%` : "-"));
-      if (stats.subjects.list.includes(n)) {
+      li.style.setProperty("--c", colorFor(n));
+      const name = el("span", "nm", n);
+      if (n === active) name.append(el("em", null, stats.study.activeSince ? "studying" : "selected"));
+      li.append(sw, name, el("span", "mn", hm(m)), el("span", "pc", total ? `${Math.round((m / total) * 100)}%` : "-"));
+      if (pickable) {
+        li.tabIndex = 0;
+        li.title = n === active ? `Clear ${n}` : `Study ${n}`;
+        const pick = () => setSubject(n === active ? null : n);
+        li.addEventListener("click", (e) => !e.target.closest(".rm") && pick());
+        li.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && !e.target.closest(".rm") && (e.preventDefault(), pick()));
         const rm = el("button", "rm", "×");
         rm.type = "button";
         rm.title = `Remove ${n} (its past time is kept)`;
@@ -601,24 +500,47 @@ function renderProgress() {
   store.set("gt-level", String(p.level));
   store.set("gt-badges", JSON.stringify(unlocked));
 
+  $("badgeCount").replaceChildren(el("b", null, String(unlocked.length)), ` / ${p.badges.length} badges unlocked`);
+  renderBadges(fresh);
+}
+
+let badgeFilter = "all";
+const fmtNeed = (b, v) => (b.id === "marathon" || b.need >= 600 ? hm(v).replace(/ 00m$/, "") : String(v)); // time badges read better as hours
+
+function renderBadges(fresh = []) {
+  const p = stats.progress;
   const box = $("badges");
-  const sig = JSON.stringify(p.badges.map((b) => [b.id, b.have]));
+  const sig = JSON.stringify([p.badges.map((b) => [b.id, b.have]), badgeFilter]);
   if (box.dataset.sig === sig) return;
   box.dataset.sig = sig;
+  const shown = p.badges.filter((b) => badgeFilter === "all" || (badgeFilter === "unlocked") === b.unlocked);
+  if (!shown.length) return box.replaceChildren(el("p", "muted", badgeFilter === "unlocked" ? "No badges yet. Start a session to earn your first one!" : "You've unlocked every badge. Legend."));
   box.replaceChildren(
-    ...p.badges.map((b) => {
+    ...shown.map((b) => {
       const card = el("div", "badge" + (b.unlocked ? " on" : "") + (fresh.includes(b.id) ? " fresh" : ""));
-      card.title = b.desc;
-      const bar = el("div", "mini");
-      const fill = el("i");
-      fill.style.width = `${(b.have / b.need) * 100}%`;
-      bar.append(fill);
-      card.append(el("div", "hex", b.icon), el("b", null, b.name), b.unlocked ? el("small", null, "unlocked") : el("small", null, b.need > 1 ? `${b.have} / ${b.need}` : "locked"));
-      if (!b.unlocked && b.need > 1) card.append(bar);
+      const top = el("div", "btop");
+      top.append(el("div", "hex", b.icon), el("span", "bcat", b.cat));
+      const status = b.unlocked ? el("small", "bstat", "✓ unlocked") : el("small", "bstat", b.need > 1 ? `${fmtNeed(b, b.have)} / ${fmtNeed(b, b.need)}` : "locked");
+      card.append(top, el("b", null, b.name), el("p", "bdesc", b.desc), status);
+      if (!b.unlocked && b.need > 1) {
+        const bar = el("div", "mini");
+        const fill = el("i");
+        fill.style.width = `${(b.have / b.need) * 100}%`;
+        bar.append(fill);
+        card.append(bar);
+      }
       return card;
     })
   );
 }
+
+document.querySelectorAll("#badgeTabs button").forEach((b) =>
+  b.addEventListener("click", () => {
+    badgeFilter = b.dataset.f;
+    document.querySelectorAll("#badgeTabs button").forEach((x) => x.classList.toggle("on", x === b));
+    renderBadges();
+  })
+);
 
 function levelUp(level, rank) {
   const lu = $("levelup");
@@ -761,6 +683,75 @@ function tick() {
 
   const start = discord.activity.startTimestamp;
   $("dcTime").textContent = start ? `${hms(nowServer - start)} elapsed` : "";
+
+  // live timer in the browser tab, so you can see it from any other tab
+  document.title = study.activeSince ? `● ${hms(nowServer - study.activeSince)} · ${study.subject ?? "studying"}` : "Grind Tracker";
+  checkLongSession(study.activeSince ? nowServer - study.activeSince : 0);
+}
+
+/* ================= today's log ================= */
+const clock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+function renderLog() {
+  const list = $("log");
+  const log = stats.study.log;
+  const sig = JSON.stringify(log.map((x) => [x.kind, x.at, x.kind === "live" ? 0 : x.minutes, x.subject]));
+  if (list.dataset.sig === sig) return;
+  list.dataset.sig = sig;
+  if (!log.length) return list.replaceChildren(el("li", "empty", "Nothing yet today. Hit Start studying (or press Space) to begin."));
+  list.replaceChildren(
+    ...log.map((x) => {
+      const li = el("li", `lrow ${x.kind}`);
+      const when = x.kind === "added" ? `+ added at ${clock(x.at)}` : `${clock(x.at)} – ${x.kind === "live" ? "now" : clock(x.end)}`;
+      const tag = el("span", "ltag", x.subject ?? "untagged");
+      if (x.subject) tag.style.setProperty("--c", colorFor(x.subject));
+      const dur = el("span", "ldur", x.kind === "live" ? "live" : hm(x.minutes).replace(/^0h /, ""));
+      li.append(el("span", "lwhen", when), tag, dur);
+      if (x.kind !== "live") {
+        // two-step delete: first click arms it, second click within 3s deletes
+        const del = el("button", "ldel", "×");
+        del.type = "button";
+        del.setAttribute("aria-label", "Delete entry");
+        del.addEventListener("click", async () => {
+          if (!del.classList.contains("armed")) {
+            del.classList.add("armed");
+            del.textContent = "Delete?";
+            setTimeout(() => {
+              del.classList.remove("armed");
+              del.textContent = "×";
+            }, 3000);
+            return;
+          }
+          try {
+            apply(await api("/api/study/delete", { kind: x.kind, at: x.at }));
+            toast("Entry deleted");
+          } catch (err) {
+            showNotice(err.message);
+          }
+        });
+        li.append(del);
+      }
+      return li;
+    })
+  );
+}
+
+/* ================= long-session check ================= */
+// After 3h (and every 2h after "still here"), ask - a forgotten timer shouldn't inflate your stats.
+const STILL_FIRST = 3 * 3600e3;
+const STILL_AGAIN = 2 * 3600e3;
+function checkLongSession(elapsed) {
+  const dlg = $("still");
+  if (!elapsed) return;
+  const key = `gt-still-${stats.study.activeSince}`;
+  const nextAt = Number(store.get(key) ?? STILL_FIRST);
+  if (elapsed < nextAt || dlg.open || document.querySelector("dialog[open]")) return;
+  $("stillFor").textContent = hm(elapsed / 60000);
+  // schedule the next check now: "close" fires async, and the 1s tick could otherwise reopen it first
+  store.set(key, String(elapsed + STILL_AGAIN));
+  dlg.returnValue = "";
+  dlg.showModal();
+  dlg.onclose = () => dlg.returnValue === "end" && toggleStudy();
 }
 
 /* ================= controls ================= */
@@ -785,10 +776,27 @@ async function toggleStudy(e) {
 }
 $("studyBtn").addEventListener("click", toggleStudy);
 addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.repeat || $("settings").open || setup.open) return;
-  if (["INPUT", "BUTTON", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
-  e.preventDefault();
-  toggleStudy();
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return;
+  if (e.code === "Space") {
+    if (tag === "BUTTON") return; // let Space press the focused button
+    e.preventDefault();
+    toggleStudy();
+  } else if (/^[1-9]$/.test(e.key) && stats) {
+    const name = stats.subjects.list[Number(e.key) - 1];
+    if (name) setSubject(name === stats.study.subject ? null : name);
+  } else if (e.key === "a" || e.key === "A") {
+    e.preventDefault();
+    $("addMin").scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
+    $("addMin").focus({ preventScroll: true });
+  } else if (e.key === "g" || e.key === "G") {
+    $("settingsBtn").click();
+  } else if (e.key === "c" || e.key === "C") {
+    openSetup();
+  } else if (e.key === "?") {
+    $("help").showModal();
+  }
 });
 
 $("addForm").addEventListener("submit", async (e) => {

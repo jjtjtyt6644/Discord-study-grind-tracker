@@ -49,20 +49,45 @@ async function getAchievements(key, steamid, appid) {
     schemaCache.set(appid, Object.fromEntries(defs.map((a) => [a.name, a])));
   }
   const schema = schemaCache.get(appid);
+  const pct = await globalPercents(appid);
+  const info = (a) => {
+    const d = schema[a.apiname] ?? {};
+    return {
+      name: d.displayName ?? a.name ?? a.apiname,
+      desc: d.description || a.description || (d.hidden ? "Hidden achievement" : ""),
+      icon: (a.achieved ? d.icon : d.icongray) ?? null,
+      pct: pct[a.apiname] ?? null,
+      time: a.unlocktime ? a.unlocktime * 1000 : null,
+    };
+  };
   const unlocked = list.filter((a) => a.achieved);
-  const latest = [...unlocked].sort((a, b) => b.unlocktime - a.unlocktime)[0];
+  const locked = list.filter((a) => !a.achieved);
+  const recent = [...unlocked].sort((a, b) => b.unlocktime - a.unlocktime).slice(0, 3).map(info);
+  const withPct = (arr) => arr.filter((a) => pct[a.apiname] != null);
+  const rarest = withPct(unlocked).sort((a, b) => pct[a.apiname] - pct[b.apiname])[0];
 
   return {
     appid,
     game: r.playerstats.gameName,
     unlocked: unlocked.length,
     total: list.length,
-    latest: latest && {
-      name: schema[latest.apiname]?.displayName ?? latest.name ?? latest.apiname,
-      icon: schema[latest.apiname]?.icon ?? null,
-      time: latest.unlocktime * 1000,
-    },
+    latest: recent[0] ?? null,
+    recent,
+    rarest: rarest ? info(rarest) : null,
+    // the locked ones the most players have - your easiest next unlocks
+    next: withPct(locked).sort((a, b) => pct[b.apiname] - pct[a.apiname]).slice(0, 3).map(info),
   };
+}
+
+// apiname -> % of all players who have it; public data, cached for 6h
+const pctCache = new Map();
+async function globalPercents(appid) {
+  const hit = pctCache.get(appid);
+  if (hit && Date.now() - hit.at < 6 * 3600e3) return hit.map;
+  const r = await call("ISteamUserStats", "GetGlobalAchievementPercentagesForApp", "v2", { gameid: appid }).catch(() => null);
+  const map = Object.fromEntries((r?.achievementpercentages?.achievements ?? []).map((a) => [a.name, Number(a.percent)]));
+  pctCache.set(appid, { at: Date.now(), map });
+  return map;
 }
 
 export async function getSteam({ key, steamid }) {
@@ -137,7 +162,18 @@ function demoSteam() {
       game: "ELDEN RING",
       unlocked: 31,
       total: 42,
-      latest: { name: "Elden Lord", icon: null, time: DEMO_UNLOCK },
+      latest: { name: "Elden Lord", desc: "Achieved the \"Elden Lord\" ending", icon: null, pct: 18.4, time: DEMO_UNLOCK },
+      recent: [
+        { name: "Elden Lord", desc: "Achieved the \"Elden Lord\" ending", icon: null, pct: 18.4, time: DEMO_UNLOCK },
+        { name: "Hoarah Loux", desc: "Defeated Hoarah Loux, Warrior", icon: null, pct: 24.1, time: DEMO_UNLOCK - 86400e3 },
+        { name: "Malenia", desc: "Defeated Malenia, Blade of Miquella", icon: null, pct: 31.7, time: DEMO_UNLOCK - 3 * 86400e3 },
+      ],
+      rarest: { name: "Elden Lord", desc: "Achieved the \"Elden Lord\" ending", icon: null, pct: 18.4, time: DEMO_UNLOCK },
+      next: [
+        { name: "Legendary Armaments", desc: "Acquired all legendary armaments", icon: null, pct: 22.9, time: null },
+        { name: "Age of the Stars", desc: "Achieved the \"Age of the Stars\" ending", icon: null, pct: 14.2, time: null },
+        { name: "Lord of Frenzied Flame", desc: "Achieved the \"Lord of Frenzied Flame\" ending", icon: null, pct: 12.6, time: null },
+      ],
     },
     playtimes: null,
     demoPlayedToday: 85,

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About · Grind Tracker</title>
+  <link rel="icon" href="img/logo-small.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-mode="idle" class="page">
+  <canvas id="bg" aria-hidden="true"></canvas>
+
+  <div class="page-wrap">
+    <header class="top">
+      <a class="brand" href="/">
+        <img class="logo" src="img/logo-small.png" alt="">
+        <span>GRIND<b>//</b>TRACKER</span>
+      </a>
+      <nav class="nav">
+        <a href="/">Dashboard</a>
+        <a href="guide.html">Guide</a>
+        <a href="about.html" aria-current="page">About</a>
+      </nav>
+    </header>
+
+    <section class="about-hero">
+      <div class="about-art" aria-hidden="true"><img src="img/bg.jpg" alt=""></div>
+      <div class="about-copy">
+        <div class="eyebrow"><span class="mode-dot"></span>ABOUT</div>
+        <h1>Study hard.<br><em>Game harder.</em><br>Show both.</h1>
+        <p>Grind Tracker is a study + gaming tracker that lives on your own PC. It turns your focus time, Steam play time and progress into a live card on your Discord profile, plus a dashboard that's actually fun to keep open.</p>
+        <div class="about-cta">
+          <a class="cta-link" href="/">Open the dashboard</a>
+          <a class="ghost-link" href="https://github.com/jjtjtyt6644/Discord-study-grind-tracker" target="_blank" rel="noopener">View on GitHub ↗</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-grid">
+      <article class="card">
+        <h2><span>01</span>Why it exists</h2>
+        <p>Your Discord profile shows what you <em>play</em>, but never what you <em>study</em>. Grind Tracker puts both side by side, so your friends see the grind and you have a reason to keep the streak alive.</p>
+        <p class="muted">Discord's profile "Widgets" board is only open to officially claimed games. So Grind Tracker uses <b>Rich Presence</b>, the "Playing …" card that any app on your PC can set.</p>
+      </article>
+
+      <article class="card">
+        <h2><span>02</span>Your data stays yours</h2>
+        <ul class="bullets">
+          <li>Everything runs on <code>localhost</code>. There's no account, no cloud and no tracking.</li>
+          <li>Study history lives in <code>data.json</code>, and your keys live in <code>.env</code>, both in the app folder.</li>
+          <li>The app only talks to the Steam Web API and to your own Discord desktop app.</li>
+          <li>The local server refuses requests from any other website.</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2><span>03</span>What's inside</h2>
+        <ul class="bullets">
+          <li><b>Node.js</b> server with no framework: one file serves the dashboard and the API.</li>
+          <li><b>Steam Web API</b> for your profile, play time, achievements and global rarity.</li>
+          <li><b>Discord RPC</b> via <code>@xhayper/discord-rpc</code> for the profile card.</li>
+          <li><b>Plain HTML, CSS and JS</b> dashboard: canvas aurora, segmented bars, no build step.</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2><span>04</span>Credits</h2>
+        <ul class="bullets">
+          <li>Built by <a href="https://github.com/jjtjtyt6644" target="_blank" rel="noopener">jjtjtyt6644</a>.</li>
+          <li><b>Reze</b> is a character from <i>Chainsaw Man</i> by Tatsuki Fujimoto. The default artwork is fan art found on Pinterest, and all rights belong to its original artists. Swap in your own art in <code>public/img/</code>.</li>
+          <li>Fonts: Chakra Petch, Inter and JetBrains Mono via Google Fonts.</li>
+          <li>Game banners and achievement icons are served by Steam.</li>
+        </ul>
+      </article>
+    </section>
+
+    <footer class="page-foot">GRIND<b>//</b>TRACKER · <a href="guide.html">read the guide</a> · <a href="/">back to the dashboard</a></footer>
+  </div>
+
+  <script src="bg.js"></script>
+  <script src="pages.js"></script>
+</body>
+</html>

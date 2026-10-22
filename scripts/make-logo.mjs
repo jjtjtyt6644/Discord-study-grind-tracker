@@ -40,6 +40,9 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" wid
   </g>
 </svg>`;
 
-const png = new Resvg(svg, { fitTo: { mode: "width", value: 1024 } }).render().asPng();
-writeFileSync(path.join(ROOT, "public/img/logo.png"), png);
-console.log("✓ wrote public/img/logo.png");
+// full size for Discord, plus a light 256px copy for the page header and browser tab
+for (const [file, size] of [["logo.png", 1024], ["logo-small.png", 256]]) {
+  const png = new Resvg(svg, { fitTo: { mode: "width", value: size } }).render().asPng();
+  writeFileSync(path.join(ROOT, "public/img", file), png);
+  console.log(`✓ wrote public/img/${file} (${Math.round(png.length / 1024)} KB)`);
+}

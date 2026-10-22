@@ -2,7 +2,3 @@ node_modules/
 .env
 data.json
 .claude/
-
-# your own art - add it locally (see README)
-public/img/*
-!public/img/.gitkeep

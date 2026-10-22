@@ -82,6 +82,31 @@ function heatmap() {
   return cells;
 }
 
+// newest first: the running session, finished sessions and manually added time
+function todayLog() {
+  const d = data.days[dayKey()] ?? { sessions: [], manualEntries: [] };
+  const log = [
+    ...d.sessions.map((s) => ({ kind: "session", at: s.start, end: s.end, minutes: Math.round((s.end - s.start) / 60_000), subject: s.subject ?? null })),
+    ...(d.manualEntries ?? []).map((e) => ({ kind: "added", at: e.at, minutes: e.minutes, subject: e.subject ?? null })),
+  ];
+  if (data.activeStudy && dayKey(new Date(data.activeStudy)) === dayKey()) {
+    log.push({ kind: "live", at: data.activeStudy, minutes: Math.round((Date.now() - data.activeStudy) / 60_000), subject: data.activeSubject });
+  }
+  return log.sort((a, b) => b.at - a.at);
+}
+
+function exportCsv() {
+  const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const time = (t) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const rows = [["date", "type", "start", "end", "minutes", "subject"]];
+  for (const k of Object.keys(data.days).sort()) {
+    const d = data.days[k];
+    for (const s of d.sessions) rows.push([k, "session", time(s.start), time(s.end), Math.round((s.end - s.start) / 60_000), s.subject]);
+    for (const e of d.manualEntries ?? []) rows.push([k, "added", time(e.at), "", e.minutes, e.subject]);
+  }
+  return rows.map((r) => r.map(q).join(",")).join("\r\n");
+}
+
 function checkSubject(subject) {
   if (subject == null || subject === "") return null;
   if (!data.subjects.includes(subject)) throw new Error(`Unknown subject "${subject}"`);
@@ -249,6 +274,7 @@ async function buildStats() {
       sessionsToday: sessions.length,
       longestSessionMs: Math.max(0, ...sessions),
       subject: data.activeSubject,
+      log: todayLog(),
       week,
     },
     subjects: {
@@ -333,11 +359,35 @@ const routes = {
     if (!Number.isFinite(minutes) || minutes < 1 || minutes > 720) throw new Error("minutes must be 1-720");
     const subject = checkSubject(body.subject ?? data.activeSubject);
     const d = day();
-    d.manualMinutes += Math.round(minutes);
+    const m = Math.round(minutes);
+    d.manualMinutes += m;
     if (subject) {
       d.manualBySubject ??= {};
-      d.manualBySubject[subject] = (d.manualBySubject[subject] ?? 0) + Math.round(minutes);
+      d.manualBySubject[subject] = (d.manualBySubject[subject] ?? 0) + m;
     }
+    // kept separately so it shows in the log and can be deleted
+    (d.manualEntries ??= []).push({ at: Date.now(), minutes: m, subject });
+    save();
+  },
+  // remove a finished session or an "added minutes" entry, e.g. a timer left running by mistake
+  "POST /api/study/delete": async (body) => {
+    const at = Number(body.at);
+    const d = data.days[dayKey(new Date(at))];
+    if (!d) throw new Error("Entry not found");
+    if (body.kind === "session") {
+      const i = d.sessions.findIndex((s) => s.start === at);
+      if (i < 0) throw new Error("Session not found");
+      d.sessions.splice(i, 1);
+    } else if (body.kind === "added") {
+      const i = (d.manualEntries ?? []).findIndex((e) => e.at === at);
+      if (i < 0) throw new Error("Entry not found");
+      const [e] = d.manualEntries.splice(i, 1);
+      d.manualMinutes = Math.max(0, d.manualMinutes - e.minutes);
+      if (e.subject && d.manualBySubject?.[e.subject] != null) {
+        d.manualBySubject[e.subject] = Math.max(0, d.manualBySubject[e.subject] - e.minutes);
+        if (!d.manualBySubject[e.subject]) delete d.manualBySubject[e.subject];
+      }
+    } else throw new Error("kind must be session or added");
     save();
   },
   "POST /api/subjects": async (body) => {
@@ -385,6 +435,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const route = routes[`${req.method} ${url.pathname}`];
   if (url.pathname.startsWith("/api/") && !isLocalRequest(req)) return json(res, 403, { error: "local requests only" });
+  if (req.method === "GET" && url.pathname === "/api/export.csv") {
+    res.writeHead(200, { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="grind-tracker-${dayKey()}.csv"` });
+    return res.end("﻿" + exportCsv()); // BOM so Excel reads the UTF-8 correctly
+  }
   if (route) {
     try {
       const body = req.method === "POST" ? await readBody(req) : null;

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guide · Grind Tracker</title>
+  <link rel="icon" href="img/logo-small.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-mode="idle" class="page">
+  <canvas id="bg" aria-hidden="true"></canvas>
+
+  <div class="page-wrap">
+    <header class="top">
+      <a class="brand" href="/">
+        <img class="logo" src="img/logo-small.png" alt="">
+        <span>GRIND<b>//</b>TRACKER</span>
+      </a>
+      <nav class="nav">
+        <a href="/">Dashboard</a>
+        <a href="guide.html" aria-current="page">Guide</a>
+        <a href="about.html">About</a>
+      </nav>
+    </header>
+
+    <section class="page-hero">
+      <div class="eyebrow"><span class="mode-dot"></span>FIELD MANUAL</div>
+      <h1>How to <em>grind</em> properly</h1>
+      <p>Everything the dashboard does, how XP and badges are scored, and how to fix things when Discord or Steam act up.</p>
+    </section>
+
+    <div class="guide">
+      <aside class="toc" aria-label="On this page">
+        <a href="#start">01 · Getting started</a>
+        <a href="#timer">02 · The study timer</a>
+        <a href="#subjects">03 · Subjects</a>
+        <a href="#xp">04 · XP &amp; ranks</a>
+        <a href="#badges">05 · Badges</a>
+        <a href="#steam">06 · Steam stats</a>
+        <a href="#discord">07 · Your Discord card</a>
+        <a href="#log">08 · Log &amp; export</a>
+        <a href="#keys">09 · Shortcuts</a>
+        <a href="#help">10 · Troubleshooting</a>
+      </aside>
+
+      <article class="doc">
+        <section id="start" class="card">
+          <h2><span>01</span>Getting started</h2>
+          <ol class="steps">
+            <li><b>Run the app.</b> In the app folder, run <code>npm install</code> once, then <code>npm start</code>, and open <a href="/">localhost:3000</a>.</li>
+            <li><b>Connect your accounts.</b> The first time, a <em>Connect your accounts</em> window pops up. Paste your Discord Application ID, your Steam Web API key, and your Steam profile link. Each step links to the website you need.</li>
+            <li><b>Keep the Discord desktop app open.</b> Rich Presence only works with the desktop app, not Discord in a browser.</li>
+            <li><b>Leave Grind Tracker running</b> while you study and game. If you close it, your Discord card disappears and play time stops being tracked live.</li>
+          </ol>
+          <p class="note">Just looking around? Pick <b>Use demo data for now</b>. The dashboard fills with sample Steam stats. You can connect later from the <b>Discord</b> chip at the top right.</p>
+        </section>
+
+        <section id="timer" class="card">
+          <h2><span>02</span>The study timer</h2>
+          <ul class="bullets">
+            <li>Press <b>Start studying</b> or <kbd>Space</kbd>. Press again to end the session. The timer keeps running even if you close the tab or restart the app.</li>
+            <li>The browser tab title shows the live timer (<code>● 00:42:10 · Math</code>), so you can check it from any tab.</li>
+            <li>Forgot to start it? Type minutes into <b>Forgot the timer?</b> and press <b>Add</b>. Added time counts toward your goal, XP and subject totals.</li>
+            <li>After <b>3 hours</b> nonstop, the dashboard asks <em>Still studying?</em>, then again every 2 hours. That way a timer you forgot about can't inflate your stats.</li>
+            <li>The hero's <b>segmented bar</b> fills toward your daily goal. You get confetti when you hit it. Change the goal and your game budget under ⚙ <b>Settings</b>.</li>
+          </ul>
+          <div class="modes">
+            <div class="mode m-study"><b>Locked in</b><span>The timer is running. Purple/teal theme.</span></div>
+            <div class="mode m-game"><b>In game</b><span>Steam says you're playing. Red/orange theme.</span></div>
+            <div class="mode m-idle"><b>On break</b><span>Neither. Calm blue theme.</span></div>
+          </div>
+        </section>
+
+        <section id="subjects" class="card">
+          <h2><span>03</span>Subjects</h2>
+          <ul class="bullets">
+            <li>Pick a subject from the chips above the timer, from any row in the <b>04 · Subjects</b> card, or with keys <kbd>1</kbd>–<kbd>9</kbd>. Click the same subject again to clear it.</li>
+            <li><b>Switching subjects mid-session</b> splits the session at that moment, so each subject gets exactly the time you spent on it.</li>
+            <li>Add your own subjects (up to 12) at the bottom of the Subjects card. Removing a subject hides it from the picker, but its past time stays in your history.</li>
+            <li>Your current subject shows on Discord, e.g. <code>locked in · math</code>.</li>
+          </ul>
+        </section>
+
+        <section id="xp" class="card">
+          <h2><span>04</span>XP &amp; ranks</h2>
+          <p>XP is calculated from your <b>whole study history</b> every time the dashboard refreshes, so nothing can get out of sync:</p>
+          <div class="formula">
+            <div><b id="ruleMin">1 XP</b><span>per minute studied</span></div>
+            <i>+</i>
+            <div><b id="ruleGoal">60 XP</b><span>bonus for each day you hit your goal</span></div>
+          </div>
+          <p>Each level needs a bit more XP than the last: level <i>L</i> takes <code>50 × L × (L + 1)</code> XP in total. You start as a <b>Rookie</b> and work up through the ranks:</p>
+          <table class="ranks" id="rankTable">
+            <thead><tr><th>Rank</th><th>From level</th><th>Total XP</th><th>≈ study time</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="note">When you level up, you get a full-screen <b>LEVEL UP</b> moment. Your level also shows on your Discord card (<code>· lv 7</code>).</p>
+        </section>
+
+        <section id="badges" class="card">
+          <h2><span>05</span>Badges</h2>
+          <p>There are <b id="badgeTotal">18</b> badges in a few categories. Like XP, they're scored from your whole history, so the time you studied before a badge existed still counts. <span id="badgeMine"></span></p>
+          <div class="badge-table" id="badgeTable"></div>
+        </section>
+
+        <section id="steam" class="card">
+          <h2><span>06</span>Steam stats</h2>
+          <ul class="bullets">
+            <li><b>Played today</b>: Steam only reports lifetime playtime, so Grind Tracker records each game's total the first time it runs each day and counts the difference. The game you're in right now is counted live.</li>
+            <li><b>Achievements</b> covers the game you're playing (or played last): completion, your <b>rarest unlock</b> (with the % of all Steam players who have it), your latest unlocks, and the <b>easiest ones to get next</b>.</li>
+            <li>Rarity tiers: <span class="pill ultra">&lt; 5% ultra rare</span> <span class="pill rare">&lt; 15% rare</span> <span class="pill uncommon">&lt; 40% uncommon</span> <span class="pill common">common</span></li>
+            <li>Your Steam profile's <b>Game details</b> must be <b>Public</b>, or Steam won't share any of this.</li>
+          </ul>
+        </section>
+
+        <section id="discord" class="card">
+          <h2><span>07</span>Your Discord card</h2>
+          <p>This is what everyone sees on your profile, refreshed every 15 seconds:</p>
+<pre class="dc-sample">Playing  grind tracker
+2h 14m studied  ·  1h 30m played  ·  lv 7
+locked in · math  ▰▰▰▰▰▱▱▱▱▱  52%
+00:42:10 elapsed           [ My Steam profile ]</pre>
+          <ul class="bullets">
+            <li>The <b>name</b> after "Playing" is your Discord application's name. Rename it in the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Developer Portal ↗</a>.</li>
+            <li>The <b>picture</b> is your logo (set <code>logo</code> as the card image in the connections window), or the game's banner while you play.</li>
+            <li>Hover the picture on Discord to see your rank and goal progress.</li>
+          </ul>
+        </section>
+
+        <section id="log" class="card">
+          <h2><span>08</span>Log &amp; export</h2>
+          <ul class="bullets">
+            <li><b>06 · Today's log</b> lists every session and added block of time today, newest first.</li>
+            <li>Made a mistake, like a timer left running? Click <b>×</b> and then <b>Delete?</b> to remove that entry. Your totals, XP and badges update right away.</li>
+            <li><b>Export CSV</b> downloads your full history (date, start, end, minutes, subject) to open in Excel or Google Sheets.</li>
+          </ul>
+        </section>
+
+        <section id="keys" class="card">
+          <h2><span>09</span>Keyboard shortcuts</h2>
+          <dl class="keys">
+            <div><dt><kbd>Space</kbd></dt><dd>Start / stop studying</dd></div>
+            <div><dt><kbd>1</kbd> – <kbd>9</kbd></dt><dd>Pick a subject (press again to clear)</dd></div>
+            <div><dt><kbd>A</kbd></dt><dd>Jump to "add minutes"</dd></div>
+            <div><dt><kbd>G</kbd></dt><dd>Goals &amp; settings</dd></div>
+            <div><dt><kbd>C</kbd></dt><dd>Discord &amp; Steam connections</dd></div>
+            <div><dt><kbd>?</kbd></dt><dd>Show shortcuts on the dashboard</dd></div>
+          </dl>
+        </section>
+
+        <section id="help" class="card">
+          <h2><span>10</span>Troubleshooting</h2>
+          <details class="faq" open>
+            <summary>Nothing shows on my Discord profile</summary>
+            <p>Check that the top-right chip on the dashboard says <b>Discord live</b>. If it says "Waiting for Discord", open the Discord desktop app. In Discord, go to <b>User Settings → Activity Privacy</b> and turn on <b>Share your detected activities with others</b>. Your status also can't be <b>Invisible</b>.</p>
+          </details>
+          <details class="faq">
+            <summary>It says demo mode</summary>
+            <p>Click the demo-mode banner (or press <kbd>C</kbd>) and finish the three connection steps. They save instantly, with no restart needed.</p>
+          </details>
+          <details class="faq">
+            <summary>"Played today" is 0 or wrong</summary>
+            <p>Set Steam <b>Game details</b> to <b>Public</b>, and start Grind Tracker before you play, since it counts from its first run each day.</p>
+          </details>
+          <details class="faq">
+            <summary>"Steam rejected the API key"</summary>
+            <p>Copy the key again from <a href="https://steamcommunity.com/dev/apikey" target="_blank" rel="noopener">steamcommunity.com/dev/apikey ↗</a>. It's exactly 32 letters and numbers, with no spaces.</p>
+          </details>
+          <details class="faq">
+            <summary>Port already in use (<code>EADDRINUSE</code>)</summary>
+            <p>Grind Tracker is probably already running in another window. Close that one, or set a different <code>PORT</code> in <code>.env</code>.</p>
+          </details>
+        </section>
+      </article>
+    </div>
+
+    <footer class="page-foot">GRIND<b>//</b>TRACKER · <a href="/">back to the dashboard</a></footer>
+  </div>
+
+  <script src="bg.js"></script>
+  <script src="pages.js"></script>
+</body>
+</html>
