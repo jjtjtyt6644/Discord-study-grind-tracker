@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSteam, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
 import { startPresence, updatePresence, presenceState, buildActivity } from "./presence.js";
+import { computeProgress } from "./progress.js";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const ENV_FILE = process.env.ENV_FILE || path.join(ROOT, ".env");
@@ -38,7 +39,60 @@ function save() {
   saveTimer = setTimeout(() => writeFile(DATA_FILE, JSON.stringify(data, null, 2)).catch(console.error), 200);
 }
 
+const DEFAULT_SUBJECTS = ["Math", "Science", "Coding", "Language", "Reading"];
+data.subjects ??= DEFAULT_SUBJECTS;
+data.activeSubject ??= null;
+
 const day = (key = dayKey()) => (data.days[key] ??= { sessions: [], manualMinutes: 0, snapshot: null });
+const studyMin = (key) => studyMs(key) / 60_000;
+
+// "Untagged" covers sessions from before subjects existed and timer runs with no subject picked
+function minutesBySubject(keys) {
+  const out = {};
+  const add = (subject, min) => {
+    if (min > 0) out[subject || "Untagged"] = (out[subject || "Untagged"] ?? 0) + min;
+  };
+  for (const k of keys) {
+    const d = data.days[k];
+    if (d) {
+      for (const s of d.sessions) add(s.subject, (s.end - s.start) / 60_000);
+      let tagged = 0;
+      for (const [subject, min] of Object.entries(d.manualBySubject ?? {})) {
+        add(subject, min);
+        tagged += min;
+      }
+      add(null, d.manualMinutes - tagged);
+    }
+    if (data.activeStudy && dayKey(new Date(data.activeStudy)) === k) add(data.activeSubject, (Date.now() - data.activeStudy) / 60_000);
+  }
+  for (const k of Object.keys(out)) out[k] = Math.round(out[k]);
+  return out;
+}
+
+// 53 week-columns ending this week, Sunday first - same shape as GitHub's contribution graph
+function heatmap() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - (52 * 7 + end.getDay()));
+  const cells = [];
+  for (const d = start; d <= end; d.setDate(d.getDate() + 1)) {
+    const k = dayKey(d);
+    cells.push({ date: k, minutes: Math.round(studyMin(k)) });
+  }
+  return cells;
+}
+
+function checkSubject(subject) {
+  if (subject == null || subject === "") return null;
+  if (!data.subjects.includes(subject)) throw new Error(`Unknown subject "${subject}"`);
+  return subject;
+}
+
+function stopSession(at = Date.now()) {
+  if (!data.activeStudy) return;
+  day(dayKey(new Date(data.activeStudy))).sessions.push({ start: data.activeStudy, end: at, subject: data.activeSubject });
+  data.activeStudy = null;
+}
 
 function studyMs(key) {
   const d = data.days[key];
@@ -176,6 +230,12 @@ async function buildStats() {
   });
 
   const playedMin = !steam ? 0 : steam.demo ? steam.demoPlayedToday : playedToday(steam);
+  // keep a per-day record of play time (the Budget Keeper badge needs past days)
+  if (steam && !steam.demo && day().playedMinutes !== Math.round(playedMin)) {
+    day().playedMinutes = Math.round(playedMin);
+    save();
+  }
+  const weekKeys = week.map((d) => d.date);
   const mode = data.activeStudy ? "study" : steam?.profile.currentGame ? "gaming" : "idle";
   const sessions = (data.days[dayKey()]?.sessions ?? []).map((s) => s.end - s.start);
 
@@ -188,8 +248,16 @@ async function buildStats() {
       goalMinutes: data.settings.goalMinutes,
       sessionsToday: sessions.length,
       longestSessionMs: Math.max(0, ...sessions),
+      subject: data.activeSubject,
       week,
     },
+    subjects: {
+      list: data.subjects,
+      today: minutesBySubject([dayKey()]),
+      week: minutesBySubject(weekKeys),
+    },
+    heatmap: heatmap(),
+    progress: computeProgress(data, studyMin, dayKey),
     played: {
       todayMinutes: playedMin,
       budgetMinutes: data.settings.playBudgetMinutes,
@@ -240,21 +308,58 @@ const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(n))));
 
 const routes = {
   "GET /api/stats": async () => buildStats(),
-  "POST /api/study/start": async () => {
+  "POST /api/study/start": async (body) => {
+    if (body.subject !== undefined) data.activeSubject = checkSubject(body.subject);
     data.activeStudy ??= Date.now();
     save();
   },
   "POST /api/study/stop": async () => {
-    if (data.activeStudy) {
-      day(dayKey(new Date(data.activeStudy))).sessions.push({ start: data.activeStudy, end: Date.now() });
-      data.activeStudy = null;
-      save();
+    stopSession();
+    save();
+  },
+  // switching mid-session closes the current piece under the old subject, so time is split correctly
+  "POST /api/study/subject": async (body) => {
+    const subject = checkSubject(body.subject);
+    if (data.activeStudy && subject !== data.activeSubject) {
+      const now = Date.now();
+      stopSession(now);
+      data.activeStudy = now;
     }
+    data.activeSubject = subject;
+    save();
   },
   "POST /api/study/add": async (body) => {
     const minutes = Number(body.minutes);
     if (!Number.isFinite(minutes) || minutes < 1 || minutes > 720) throw new Error("minutes must be 1-720");
-    day().manualMinutes += Math.round(minutes);
+    const subject = checkSubject(body.subject ?? data.activeSubject);
+    const d = day();
+    d.manualMinutes += Math.round(minutes);
+    if (subject) {
+      d.manualBySubject ??= {};
+      d.manualBySubject[subject] = (d.manualBySubject[subject] ?? 0) + Math.round(minutes);
+    }
+    save();
+  },
+  "POST /api/subjects": async (body) => {
+    if (body.add != null) {
+      const name = String(body.add).trim().replace(/\s+/g, " ");
+      if (!name || name.length > 24) throw new Error("Subject names are 1-24 characters");
+      if (data.subjects.some((s) => s.toLowerCase() === name.toLowerCase())) throw new Error(`"${name}" already exists`);
+      if (data.subjects.length >= 12) throw new Error("You can have up to 12 subjects");
+      data.subjects = [...data.subjects, name];
+    }
+    if (body.remove != null) {
+      data.subjects = data.subjects.filter((s) => s !== body.remove);
+      // past sessions keep their label; only the picker forgets it
+      if (data.activeSubject === body.remove) {
+        if (data.activeStudy) {
+          const now = Date.now();
+          stopSession(now);
+          data.activeStudy = now;
+        }
+        data.activeSubject = null;
+      }
+    }
     save();
   },
   "POST /api/config": saveConfig,

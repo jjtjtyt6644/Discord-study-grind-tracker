@@ -6,8 +6,8 @@ What your friends see on your profile:
 
 ```
 Playing  grind tracker
-2h 14m studied  ·  1h 30m played
-locked in  ▰▰▰▰▰▱▱▱▱▱  52%
+2h 14m studied  ·  1h 30m played  ·  lv 7
+locked in · math  ▰▰▰▰▰▱▱▱▱▱  52%
 00:42:10 elapsed
 [ My Steam profile ]
 ```
@@ -18,6 +18,10 @@ locked in  ▰▰▰▰▰▱▱▱▱▱  52%
 - **Played today**: pulled from Steam automatically, including the game you're in right now.
 - **Steam stats**: profile, level, current game, recently played, games owned, lifetime hours, and achievement progress.
 - **Discord Rich Presence**: your profile updates every 15 seconds with study time, play time and a goal progress bar.
+- **XP, levels & ranks**: earn 1 XP per minute studied, plus a bonus every day you hit your goal. Rank up from Rookie → Apprentice → Scholar → Strategist → Sage → Mastermind → Legend, with a full-screen LEVEL UP animation. Your level shows on your Discord card.
+- **Badges**: 11 to unlock, including First Blood, On Fire (3-day streak), Unstoppable (7 days), Marathon (2h session), Night Owl, Early Bird, Goal Crusher, Budget Keeper, Polymath, the Ten-Hour Club and Centurion. Your past history counts too.
+- **Subjects**: tag sessions as Math, Coding or your own subjects, and see a breakdown for today and the week. Switching subjects mid-session splits the time correctly. Your current subject shows on Discord (`locked in · math`).
+- **Year heatmap**: a GitHub-style grid of every day you studied this year, with totals, active days and your best day.
 - **Daily goal + game budget**: segmented progress bars, a 7-day chart, a streak counter, and confetti when you hit your goal.
 - **Dashboard**: moving aurora background, a character panel with mode-reactive tint and speech bubbles, and color themes per mode (purple = studying, red = gaming, blue = on break).
 
@@ -110,6 +114,7 @@ Within about 15 seconds of connecting, your Discord profile shows the activity c
 | Do this | How |
 | --- | --- |
 | Start / stop studying | Click **Start studying**, or press <kbd>Space</kbd> anywhere on the page |
+| Tag what you're studying | Click a subject chip above the timer (click it again to clear). Add or remove subjects in the **Subjects** card |
 | Forgot to start the timer | Type the minutes into **"Forgot the timer?"** and press **Add** |
 | Change your daily goal or game budget | Click the ⚙ gear (top right) |
 | Change your Discord or Steam keys | Click the **Discord** chip (top right), or ⚙ → *Edit Discord & Steam connections* |
@@ -176,6 +181,7 @@ The "Playing …" name comes from your app's name in the Developer Portal. The t
 | `server.js` | Local web server (only reachable from your PC). Tracks study sessions and serves the dashboard and `/api/stats` |
 | `steam.js` | Steam Web API calls, cached for 45 seconds. Demo data when no key is set |
 | `presence.js` | Builds the Discord activity text and keeps the Rich Presence connection alive |
+| `progress.js` | XP, levels, ranks and badges, all calculated from your study history |
 | `public/` | The dashboard (`index.html`, `style.css`, `app.js`) and your art in `public/img/` |
 | `scripts/make-logo.mjs` | Turns `logo-source.jpg` into the round neon logo |
 | `data.json` | Your study history (created automatically, not committed) |

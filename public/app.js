@@ -294,6 +294,10 @@ function render() {
   if (JSON.stringify(steam?.recent) !== renderGames.last) renderGames(steam?.recent ?? []);
   renderWeek(study.week, study.goalMinutes);
   renderDiscord(discord);
+  renderSubjectPick();
+  renderSubjects();
+  renderProgress();
+  renderHeatmap();
   renderMarquee();
   maybeOpenSetup();
 }
@@ -471,9 +475,216 @@ function renderDiscord(d) {
   }
 }
 
+/* ================= subjects ================= */
+const SUBJECT_COLORS = ["#b794ff", "#5eead4", "#ffb454", "#ff6b8b", "#60a5fa", "#a3e635", "#f472b6", "#facc15", "#38bdf8", "#fb923c", "#c084fc", "#4ade80"];
+const colorFor = (name) => {
+  const i = stats.subjects.list.indexOf(name);
+  return i < 0 ? "#5a5f78" : SUBJECT_COLORS[i % SUBJECT_COLORS.length];
+};
+let subjRange = "today";
+
+async function setSubject(subject) {
+  try {
+    apply(await api("/api/study/subject", { subject }));
+  } catch (err) {
+    showNotice(err.message);
+  }
+}
+
+function renderSubjectPick() {
+  const pick = $("subjectPick");
+  const { list } = stats.subjects;
+  const active = stats.study.subject;
+  const sig = JSON.stringify([list, active]);
+  if (pick.dataset.sig === sig) return;
+  pick.dataset.sig = sig;
+  pick.replaceChildren(
+    ...list.map((name) => {
+      const b = el("button", null, name);
+      b.type = "button";
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", String(name === active));
+      b.style.setProperty("--c", colorFor(name));
+      // clicking the active subject again clears it
+      b.addEventListener("click", () => setSubject(name === active ? null : name));
+      return b;
+    })
+  );
+}
+
+function renderSubjects() {
+  const data = stats.subjects[subjRange];
+  const names = [...new Set([...Object.keys(data), ...stats.subjects.list])];
+  const rows = names.map((n) => [n, data[n] ?? 0]).sort((a, b) => b[1] - a[1]);
+  const total = rows.reduce((s, [, m]) => s + m, 0);
+
+  $("subjStack").replaceChildren(
+    ...rows.filter(([, m]) => m > 0).map(([n, m]) => {
+      const seg = el("i");
+      seg.style.background = colorFor(n);
+      seg.style.flexGrow = m;
+      seg.title = `${n}: ${hm(m)}`;
+      return seg;
+    })
+  );
+
+  const legend = $("subjLegend");
+  const sig = JSON.stringify([rows, subjRange]);
+  if (legend.dataset.sig === sig) return;
+  legend.dataset.sig = sig;
+  if (!rows.length) return legend.replaceChildren(el("li", "empty", "Add a subject below to start tagging sessions."));
+  legend.replaceChildren(
+    ...rows.map(([n, m]) => {
+      const li = el("li");
+      const sw = el("span", "sw");
+      sw.style.background = colorFor(n);
+      li.append(sw, el("span", "nm", n), el("span", "mn", hm(m)), el("span", "pc", total ? `${Math.round((m / total) * 100)}%` : "-"));
+      if (stats.subjects.list.includes(n)) {
+        const rm = el("button", "rm", "×");
+        rm.type = "button";
+        rm.title = `Remove ${n} (its past time is kept)`;
+        rm.setAttribute("aria-label", `Remove ${n}`);
+        rm.addEventListener("click", async () => {
+          try {
+            apply(await api("/api/subjects", { remove: n }));
+          } catch (err) {
+            showNotice(err.message);
+          }
+        });
+        li.append(rm);
+      }
+      return li;
+    })
+  );
+}
+
+document.querySelectorAll(".c-subjects .tabs button").forEach((b) =>
+  b.addEventListener("click", () => {
+    subjRange = b.dataset.range;
+    document.querySelectorAll(".c-subjects .tabs button").forEach((x) => x.classList.toggle("on", x === b));
+    renderSubjects();
+  })
+);
+
+$("subjForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = $("subjIn");
+  try {
+    apply(await api("/api/subjects", { add: input.value }));
+    input.value = "";
+  } catch (err) {
+    showNotice(err.message);
+  }
+});
+
+/* ================= rank, xp, badges ================= */
+function renderProgress() {
+  const p = stats.progress;
+  $("lvlPill").textContent = `LV ${p.level}`;
+  $("lvlNum").textContent = p.level;
+  $("rankName").textContent = p.rank;
+  $("xpNow").textContent = `${p.xp.toLocaleString()} XP`;
+  $("xpNext").textContent = `${(p.nextXp - p.xp).toLocaleString()} XP to level ${p.level + 1}`;
+  $("xpFill").style.width = `${((p.xp - p.levelXp) / (p.nextXp - p.levelXp)) * 100}%`;
+  const next = $("nextRank");
+  next.replaceChildren();
+  if (p.nextRank) next.append("Next rank: ", el("b", null, p.nextRank.name), ` at level ${p.nextRank.level}`);
+  else next.textContent = "Max rank reached. Legendary.";
+
+  // celebrate new levels and badges, but not on the very first visit
+  const unlocked = p.badges.filter((b) => b.unlocked).map((b) => b.id);
+  const prevLevel = store.get("gt-level");
+  const prevBadges = JSON.parse(store.get("gt-badges") ?? "null");
+  const fresh = prevBadges ? unlocked.filter((id) => !prevBadges.includes(id)) : [];
+  if (prevLevel != null && p.level > Number(prevLevel)) levelUp(p.level, p.rank);
+  fresh.forEach((id, i) => setTimeout(() => toast(`Badge unlocked · ${p.badges.find((b) => b.id === id).name}`), 1200 + i * 3800));
+  store.set("gt-level", String(p.level));
+  store.set("gt-badges", JSON.stringify(unlocked));
+
+  const box = $("badges");
+  const sig = JSON.stringify(p.badges.map((b) => [b.id, b.have]));
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  box.replaceChildren(
+    ...p.badges.map((b) => {
+      const card = el("div", "badge" + (b.unlocked ? " on" : "") + (fresh.includes(b.id) ? " fresh" : ""));
+      card.title = b.desc;
+      const bar = el("div", "mini");
+      const fill = el("i");
+      fill.style.width = `${(b.have / b.need) * 100}%`;
+      bar.append(fill);
+      card.append(el("div", "hex", b.icon), el("b", null, b.name), b.unlocked ? el("small", null, "unlocked") : el("small", null, b.need > 1 ? `${b.have} / ${b.need}` : "locked"));
+      if (!b.unlocked && b.need > 1) card.append(bar);
+      return card;
+    })
+  );
+}
+
+function levelUp(level, rank) {
+  const lu = $("levelup");
+  $("luLevel").textContent = level;
+  $("luRank").textContent = rank;
+  lu.classList.add("show");
+  BG.burst(innerWidth / 2, innerHeight / 2);
+  say("goal");
+  const hide = () => lu.classList.remove("show");
+  lu.onclick = hide;
+  setTimeout(hide, 4200);
+}
+
+/* ================= year heatmap ================= */
+function renderHeatmap() {
+  const cells = stats.heatmap;
+  const goal = stats.study.goalMinutes;
+  const sig = JSON.stringify([cells.at(-1).date, cells.map((c) => c.minutes).join(), goal]);
+  const heat = $("heat");
+  if (heat.dataset.sig === sig) return;
+  heat.dataset.sig = sig;
+
+  const level = (m) => (m <= 0 ? 0 : m < goal * 0.25 ? 1 : m < goal * 0.6 ? 2 : m < goal ? 3 : 4);
+  const fmt = (d) => new Date(`${d}T12:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  heat.replaceChildren(
+    ...cells.map((c, i) => {
+      const cell = el("i", `l${level(c.minutes)}` + (i === cells.length - 1 ? " today" : ""));
+      cell.title = `${fmt(c.date)} · ${c.minutes ? hm(c.minutes) : "no study"}`;
+      return cell;
+    })
+  );
+
+  // month label over each week-column where the month changes (dropping one that would collide with the next)
+  const labels = [];
+  let last = -1;
+  for (let col = 0; col * 7 < cells.length; col++) {
+    const date = new Date(`${cells[col * 7].date}T12:00`);
+    if (date.getMonth() !== last && col < 51) {
+      if (labels.length && col - labels.at(-1).col < 3) labels.pop();
+      labels.push({ col, text: date.toLocaleDateString(undefined, { month: "short" }) });
+    }
+    last = date.getMonth();
+  }
+  $("heatMonths").replaceChildren(
+    ...labels.map(({ col, text }) => {
+      const s = el("span", null, text);
+      s.style.gridColumn = `${col + 1} / span 3`;
+      return s;
+    })
+  );
+
+  const active = cells.filter((c) => c.minutes > 0);
+  const total = active.reduce((s, c) => s + c.minutes, 0);
+  const best = active.reduce((b, c) => (c.minutes > b.minutes ? c : b), { minutes: 0 });
+  const foot = $("heatTotal");
+  foot.replaceChildren(
+    el("b", null, hm(total)), " this year · ",
+    el("b", null, String(active.length)), ` active day${active.length === 1 ? "" : "s"}`,
+    ...(best.minutes ? [" · best ", el("b", null, hm(best.minutes)), ` on ${fmt(best.date)}`] : [])
+  );
+}
+
 function renderMarquee() {
   const { study, played, steam } = stats;
   const items = [
+    `lv ${stats.progress.level} ${stats.progress.rank}`,
     `${hm(liveStudyMs() / 60000)} studied`,
     `${hm(played.todayMinutes)} played`,
     $("streak").textContent,
@@ -537,8 +748,8 @@ function tick() {
   $("goalPct").textContent = `${Math.round(pct * 100)}%`;
   renderTimer(hms(study.activeSince ? nowServer - study.activeSince : 0), !study.activeSince);
   $("timerSub").textContent = study.activeSince
-    ? `session started ${new Date(study.activeSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-    : "ready when you are";
+    ? `session started ${new Date(study.activeSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${study.subject ? ` · ${study.subject}` : ""}`
+    : study.subject ? `ready to study ${study.subject}` : "pick a subject, or just start";
 
   if (goalCelebrated === null) goalCelebrated = pct >= 1;
   if (!goalCelebrated && pct >= 1) {

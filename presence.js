@@ -82,10 +82,12 @@ export function buildActivity(stats, largeImage) {
   const { mode, study, played, steam } = stats;
   const game = steam?.profile.currentGame;
   const goalPct = study.todayMs / 60000 / study.goalMinutes;
-  const label = mode === "study" ? "locked in" : mode === "gaming" ? `in ${game.name.toLowerCase()}` : "on break";
+  const studying = study.subject ? `locked in · ${study.subject.toLowerCase()}` : "locked in";
+  const label = mode === "study" ? studying : mode === "gaming" ? `in ${game.name.toLowerCase()}` : "on break";
+  const level = stats.progress ? `  ·  lv ${stats.progress.level}` : "";
   const activity = {
     type: 0,
-    details: `${hm(study.todayMs / 60000)} studied  ·  ${hm(played.todayMinutes)} played`,
+    details: `${hm(study.todayMs / 60000)} studied  ·  ${hm(played.todayMinutes)} played${level}`,
     state: `${label}  ${bar(goalPct)}  ${Math.round(goalPct * 100)}%`.slice(0, 128),
   };
 
@@ -95,7 +97,8 @@ export function buildActivity(stats, largeImage) {
   const big = mode === "gaming" ? game.header : largeImage || steam?.profile.avatar;
   if (big) {
     activity.largeImageKey = big;
-    activity.largeImageText = `${hm(study.todayMs / 60000)} of ${hm(study.goalMinutes)} daily goal`;
+    const rank = stats.progress ? `lv ${stats.progress.level} ${stats.progress.rank.toLowerCase()} · ` : "";
+    activity.largeImageText = `${rank}${hm(study.todayMs / 60000)} of ${hm(study.goalMinutes)} goal`;
   }
   if (mode === "gaming" && steam.profile.avatar) {
     activity.smallImageKey = steam.profile.avatar;

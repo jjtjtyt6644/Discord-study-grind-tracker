@@ -32,6 +32,7 @@
       <div class="brand">
         <img class="logo" id="logo" src="img/logo.png" alt="">
         <span>GRIND<b>//</b>TRACKER</span>
+        <a class="lvl-pill" id="lvlPill" href="#rank" title="Your rank">LV 0</a>
       </div>
       <div class="top-right">
         <button class="chip" id="discordChip" title="Connections"><i class="dot"></i><span>Discord</span></button>
@@ -74,6 +75,7 @@
       <!-- session -->
       <article class="card c-session">
         <h2><span>01</span>Session</h2>
+        <div class="subject-pick" id="subjectPick" role="radiogroup" aria-label="Subject"></div>
         <div class="timer" id="timer"></div>
         <div class="timer-sub" id="timerSub">ready when you are</div>
         <div class="kv session-kv">
@@ -105,21 +107,65 @@
         </div>
       </article>
 
+      <!-- rank / xp / badges -->
+      <article class="card c-progress" id="rank">
+        <h2><span>03</span>Rank</h2>
+        <div class="prog">
+          <div class="emblem"><small>LEVEL</small><b id="lvlNum">0</b></div>
+          <div class="prog-main">
+            <div class="rank-name" id="rankName">Rookie</div>
+            <div class="xpline"><span id="xpNow">0 XP</span><span id="xpNext"></span></div>
+            <div class="xpbar"><i id="xpFill"></i></div>
+            <div class="next-rank" id="nextRank"></div>
+          </div>
+        </div>
+        <div class="badges" id="badges"></div>
+      </article>
+
+      <!-- subjects -->
+      <article class="card c-subjects">
+        <h2><span>04</span>Subjects
+          <span class="tabs" role="tablist">
+            <button type="button" class="on" data-range="today">Today</button>
+            <button type="button" data-range="week">Week</button>
+          </span>
+        </h2>
+        <div class="stack" id="subjStack"></div>
+        <ul class="legend" id="subjLegend"></ul>
+        <form class="add" id="subjForm">
+          <input id="subjIn" maxlength="24" placeholder="Add a subject" required>
+          <button type="submit">Add</button>
+        </form>
+      </article>
+
       <!-- achievements -->
       <article class="card c-ach">
-        <h2><span>03</span>Achievements</h2>
+        <h2><span>05</span>Achievements</h2>
         <div id="achBody" class="ach"><p class="muted">No achievement data yet.</p></div>
+      </article>
+
+      <!-- year heatmap -->
+      <article class="card c-heat">
+        <h2><span>06</span>Year in grind</h2>
+        <div class="heat-scroll">
+          <div class="heat-months" id="heatMonths"></div>
+          <div class="heat" id="heat"></div>
+        </div>
+        <div class="heat-foot">
+          <span id="heatTotal"></span>
+          <span class="heat-legend">less <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> more</span>
+        </div>
       </article>
 
       <!-- week -->
       <article class="card c-week">
-        <h2><span>04</span>Last 7 days</h2>
+        <h2><span>07</span>Last 7 days</h2>
         <div class="chart" id="chart"><div class="goal-line" id="goalLine"><span>goal</span></div></div>
       </article>
 
       <!-- discord -->
       <article class="card c-discord">
-        <h2><span>05</span>On your profile</h2>
+        <h2><span>08</span>On your profile</h2>
         <div class="dc">
           <div class="dc-head">Playing</div>
           <div class="dc-row">
@@ -137,7 +183,7 @@
 
       <!-- recent -->
       <article class="card c-games">
-        <h2><span>06</span>Recently played</h2>
+        <h2><span>09</span>Recently played</h2>
         <div class="strip" id="strip"></div>
       </article>
     </section>
@@ -219,6 +265,14 @@
   </dialog>
 
   <div class="toast" id="toast" role="status"></div>
+
+  <div class="levelup" id="levelup" aria-live="polite">
+    <div class="lu-inner">
+      <small>LEVEL UP</small>
+      <b id="luLevel">1</b>
+      <span id="luRank">Rookie</span>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
