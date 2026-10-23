@@ -45,6 +45,38 @@ const BADGES = [
  * @param studyMin  (dayKey) => minutes studied that day, including a running session
  * @param dayKey    (Date?) => "YYYY-MM-DD" in local time
  */
+// Streak freezes: every 7 days you hit your goal earns one (you can hold 3). A day with no study at all
+// spends one automatically, so the streak survives it. Worked out from history, so nothing is stored.
+const FREEZE_EVERY = 7;
+const FREEZE_MAX = 3;
+
+export function streakInfo(data, studyMin, dayKey, goalFor) {
+  const today = dayKey();
+  const keys = Object.keys(data.days).sort();
+  let days = 0;
+  let freezes = 0;
+  let goalDays = 0;
+  const frozen = [];
+  if (keys.length) {
+    const cursor = new Date(`${keys[0]}T12:00`);
+    for (const end = new Date(`${today}T12:00`); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+      const k = dayKey(cursor);
+      const min = studyMin(k);
+      if (min >= goalFor(k) && ++goalDays % FREEZE_EVERY === 0) freezes = Math.min(FREEZE_MAX, freezes + 1);
+      if (min > 0) days++;
+      else if (k === today) continue; // today isn't over yet
+      else if (days > 0 && freezes > 0) {
+        freezes--;
+        frozen.push(k);
+      } else {
+        days = 0;
+        frozen.length = 0;
+      }
+    }
+  }
+  return { days, freezes, max: FREEZE_MAX, every: FREEZE_EVERY, nextIn: FREEZE_EVERY - (goalDays % FREEZE_EVERY), frozen };
+}
+
 /** Minutes studied per day for any copy of the data (used to score backups). */
 export const studyMinutesOf = (data) => (key) => {
   const d = data.days[key];

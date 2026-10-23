@@ -11,7 +11,7 @@ import { questsToday, questTotals, QUEST_XP, ALL_QUESTS_BONUS } from "./quests.j
 import { createNotifier, startReminders, NOTIFY_DEFAULTS } from "./notify.js";
 import { createGameDetector } from "./games.js";
 import { vocab } from "./vocab.js";
-import { computeProgress, studyMinutesOf } from "./progress.js";
+import { computeProgress, studyMinutesOf, streakInfo } from "./progress.js";
 import { update, checkForUpdate, checkIfStale, installLatest, restartIntoUpdate, startUpdateChecks } from "./updater.js";
 import { createStore } from "./store.js";
 
@@ -51,6 +51,10 @@ data.settings.theme ??= { preset: "mode", accent: null, accent2: null };
 data.settings.games = { detect: true, custom: [], ignore: [], ...data.settings.games };
 data.settings.activity ??= "study"; // "study" | "work": only changes the words
 data.settings.weekendGoal ??= null; // minutes, or null = same as weekdays
+data.settings.autoStudy = { on: true, stop: true, apps: [], ...data.settings.autoStudy }; // apps: [{ exe, name, subject }]
+data.settings.status = { text: null, presets: ["cramming for finals", "deep work, no distractions", "studying with friends"], ...data.settings.status };
+data.settings.subjectGoals ??= {}; // subject -> minutes per week (Mon-Sun)
+data.paused ??= null; // { at } while a session is paused
 
 // Earned badges are kept for good (id -> when). The first time this runs, every backup is scored too,
 // so badges that older versions lost (after edits or goal changes) come back.
@@ -110,6 +114,56 @@ function minutesBySubject(keys) {
   }
   for (const k of Object.keys(out)) out[k] = Math.round(out[k]);
   return out;
+}
+
+const hmText = (m) => `${Math.floor(m / 60)}h ${String(Math.floor(m % 60)).padStart(2, "0")}m`;
+
+// Monday-Sunday weeks, for the weekly report and subject goals
+function weekStart(t = new Date()) {
+  const d = new Date(t);
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+const weekKeysFrom = (start) =>
+  Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    return dayKey(d);
+  });
+
+function weekReport(start) {
+  const keys = weekKeysFrom(start);
+  const prev = new Date(start);
+  prev.setDate(prev.getDate() - 7);
+  const days = keys.map((k) => ({ date: k, minutes: Math.round(studyMin(k)) }));
+  const best = days.reduce((a, b) => (b.minutes > a.minutes ? b : a));
+  const subjects = Object.entries(minutesBySubject(keys)).sort((a, b) => b[1] - a[1]);
+  const sessions = keys.flatMap((k) => data.days[k]?.sessions ?? []);
+  return {
+    from: keys[0],
+    to: keys[6],
+    days,
+    studyMin: days.reduce((s, d) => s + d.minutes, 0),
+    prevStudyMin: Math.round(weekKeysFrom(prev).reduce((s, k) => s + studyMin(k), 0)),
+    goalDays: keys.filter((k) => k <= dayKey() && studyMin(k) >= goalFor(k)).length,
+    best: best.minutes ? best : null,
+    subjects: subjects.filter(([, m]) => m >= 1).slice(0, 4).map(([name, minutes]) => ({ name, minutes })),
+    playedMin: keys.reduce((s, k) => s + (data.days[k]?.playedMinutes ?? 0), 0),
+    sessions: sessions.length,
+    focusRounds: sessions.filter((x) => x.focus).length,
+    questDays: keys.filter((k) => data.quests?.[k] && data.quests[k].ids.every((id) => data.quests[k].done[id])).length,
+  };
+}
+
+// the Monday notification
+function weeklyText() {
+  const start = weekStart();
+  start.setDate(start.getDate() - 7);
+  const r = weekReport(start);
+  const change = r.prevStudyMin ? Math.round(((r.studyMin - r.prevStudyMin) / r.prevStudyMin) * 100) : null;
+  const best = r.best ? `, best day ${new Date(`${r.best.date}T12:00`).toLocaleDateString("en-US", { weekday: "long" })} (${hmText(r.best.minutes)})` : "";
+  return `${hmText(r.studyMin)} studied${change == null ? "" : ` (${change >= 0 ? "+" : ""}${change}% vs the week before)`}, goal hit on ${r.goalDays}/7 days${best}. Open the dashboard for the full report.`;
 }
 
 // 53 week-columns ending this week, Sunday first - same shape as GitHub's contribution graph
@@ -195,9 +249,35 @@ function checkSubject(subject) {
 }
 
 function stopSession(at = Date.now(), extra = {}) {
+  splitAtMidnight();
   if (!data.activeStudy) return;
   day(dayKey(new Date(data.activeStudy))).sessions.push({ start: data.activeStudy, end: at, subject: data.activeSubject, ...extra });
   data.activeStudy = null;
+}
+
+const nextMidnight = (t) => {
+  const d = new Date(t);
+  d.setHours(24, 0, 0, 0);
+  return d.getTime();
+};
+
+// A session (or detected game) still running after midnight is cut there, so yesterday keeps its part
+// and today starts counting from 00:00. The piece before midnight never counts as a focus round.
+function splitAtMidnight() {
+  let changed = false;
+  while (data.activeStudy && dayKey(new Date(data.activeStudy)) !== dayKey()) {
+    const cut = nextMidnight(data.activeStudy);
+    day(dayKey(new Date(data.activeStudy))).sessions.push({ start: data.activeStudy, end: cut, subject: data.activeSubject });
+    data.activeStudy = cut;
+    changed = true;
+  }
+  while (data.gameLive && dayKey(new Date(data.gameLive.start)) !== dayKey()) {
+    const cut = nextMidnight(data.gameLive.start);
+    (day(dayKey(new Date(data.gameLive.start))).games ??= []).push({ name: data.gameLive.name, start: data.gameLive.start, end: cut });
+    data.gameLive.start = cut;
+    changed = true;
+  }
+  if (changed) save();
 }
 
 function studyMs(key) {
@@ -390,7 +470,9 @@ startReminders({
     const hm = (m) => `${Math.floor(m / 60)}h ${String(Math.floor(m % 60)).padStart(2, "0")}m`;
     return `${hm(t.studyMin)} studied · ${hm(t.played)} played · ${q.list.filter((x) => x.done).length}/3 quests · lv ${p.level} ${p.rank}`;
   },
+  weekly: weeklyText,
 });
+setInterval(splitAtMidnight, 30_000).unref();
 setInterval(currentQuests, 30_000).unref(); // quests also complete while the window is closed
 
 let artVersion = Date.now(); // bumped on upload so the dashboard reloads the images
@@ -425,6 +507,36 @@ async function scanGames() {
     save();
     pushPresence();
   } else if (data.gameLive) data.gameLive.seen = Date.now();
+  autoStudy(games.running());
+}
+
+// Settings → Auto-start: opening one of your study apps starts the timer (with that app's subject),
+// and closing them all stops it again - but only a session that was started this way.
+let studyAppsOpen = null; // study apps seen at the last scan (null until the first scan)
+function autoStudy(running) {
+  const s = data.settings.autoStudy;
+  const open = s.apps.filter((a) => running.includes(a.exe));
+  const before = studyAppsOpen;
+  studyAppsOpen = open.map((a) => a.exe);
+  if (!before || !s.on) return; // apps already open when Grind Tracker starts don't count as "opened"
+  const opened = open.find((a) => !before.includes(a.exe));
+  if (opened && !data.activeStudy && !focus.isFocusing()) {
+    if (opened.subject && data.subjects.includes(opened.subject)) data.activeSubject = opened.subject;
+    data.paused = null;
+    data.activeStudy = Date.now();
+    data.autoStudy = opened.exe;
+    save();
+    pushPresence();
+    notify("auto", "Started studying", `${opened.name} opened, so your timer is running${data.activeSubject ? ` (${data.activeSubject})` : ""}.`);
+  } else if (!open.length && before.length && data.autoStudy && data.activeStudy && s.stop && !focus.isFocusing()) {
+    const name = s.apps.find((a) => a.exe === data.autoStudy)?.name ?? "Your study app";
+    const mins = (Date.now() - data.activeStudy) / 60_000;
+    stopSession();
+    data.autoStudy = null;
+    save();
+    pushPresence();
+    notify("auto", "Session saved", `${name} closed, so the timer stopped after ${Math.floor(mins / 60)}h ${String(Math.floor(mins % 60)).padStart(2, "0")}m.`);
+  }
 }
 if (data.gameLive) setTimeout(scanGames, 3000); // finish or continue a game from before a restart
 
@@ -435,6 +547,7 @@ function localPlayed(key) {
 }
 
 async function buildStats() {
+  splitAtMidnight();
   let steam = null;
   let steamError = null;
   try {
@@ -467,6 +580,10 @@ async function buildStats() {
     save();
   }
   const weekKeys = week.map((d) => d.date);
+  const thisWeek = weekStart();
+  const lastWeek = new Date(thisWeek);
+  lastWeek.setDate(lastWeek.getDate() - 7);
+  const subjectWeek = minutesBySubject(weekKeysFrom(thisWeek));
   const mode = data.activeStudy ? "study" : game ? "gaming" : "idle";
   const sessions = (data.days[dayKey()]?.sessions ?? []).map((s) => s.end - s.start);
 
@@ -480,13 +597,21 @@ async function buildStats() {
       sessionsToday: sessions.length,
       longestSessionMs: Math.max(0, ...sessions),
       subject: data.activeSubject,
+      pausedAt: data.paused?.at ?? null,
+      autoStarted: data.activeStudy && data.autoStudy ? (data.settings.autoStudy.apps.find((a) => a.exe === data.autoStudy)?.name ?? null) : null,
       log: todayLog(),
       week,
     },
+    streak: streakInfo(data, studyMin, dayKey, goalFor),
+    weekly: { last: weekReport(lastWeek), current: weekReport(thisWeek) },
     subjects: {
       list: data.subjects,
       today: minutesBySubject([dayKey()]),
       week: minutesBySubject(weekKeys),
+      // this week's (Mon-Sun) progress toward each weekly subject goal
+      goals: Object.entries(data.settings.subjectGoals)
+        .filter(([s]) => data.subjects.includes(s))
+        .map(([subject, goal]) => ({ subject, goal, done: subjectWeek[subject] ?? 0 })),
     },
     heatmap: heatmap(),
     quests: currentQuests(),
@@ -513,13 +638,14 @@ async function buildStats() {
       update,
       dataDir: isDesktop ? APP_DIR : null,
     },
-    prefs: { privacy: data.settings.privacy, notify: data.settings.notify, theme: data.settings.theme, focus: data.settings.focus, activity: data.settings.activity, weekendGoal: data.settings.weekendGoal, weekdayGoal: data.settings.goalMinutes },
+    prefs: { privacy: data.settings.privacy, notify: data.settings.notify, theme: data.settings.theme, focus: data.settings.focus, activity: data.settings.activity, weekendGoal: data.settings.weekendGoal, weekdayGoal: data.settings.goalMinutes, status: data.settings.status, autoStudy: data.settings.autoStudy, subjectGoals: data.settings.subjectGoals },
     art: { bg: hasCustomArt("bg.jpg"), logo: hasCustomArt("logo-small.png"), v: artVersion },
     inbox: notifier.inbox(),
   };
   for (const b of stats.progress.badges) b.desc = words(b.desc);
   const activity = buildActivity(stats, process.env.LARGE_IMAGE, data.settings.privacy);
-  if (activity) for (const k of ["details", "state", "largeImageText"]) if (activity[k]) activity[k] = words(activity[k]);
+  // (a game's name is left exactly as it is)
+  if (activity) for (const k of ["details", "state", "largeImageText"]) if (activity[k] && !(k === "details" && activity.statusDisplayType === 2)) activity[k] = words(activity[k]);
   stats.discord = { ...presenceState(), activity };
   return stats;
 }
@@ -591,14 +717,35 @@ const routes = {
     if (focus.inBreak()) focus.stop(); // starting a normal session ends a focus break
     if (body.subject !== undefined) data.activeSubject = checkSubject(body.subject);
     data.activeStudy ??= Date.now();
+    data.paused = null;
+    data.autoStudy = null; // started by hand, so closing a study app won't stop it
     save();
   },
   "POST /api/study/stop": async () => {
     if (focus.isFocusing()) focus.stop();
     else stopSession();
+    data.paused = null;
+    data.autoStudy = null;
     save();
   },
-  "POST /api/focus/start": async () => focus.start(),
+  // pause = save the session so far; resume starts a new one with the same subject
+  "POST /api/study/pause": async () => {
+    if (focus.isFocusing()) throw new Error("The focus timer has its own breaks. Use Skip or Stop");
+    if (!data.activeStudy) throw new Error("Nothing to pause");
+    stopSession();
+    data.paused = { at: Date.now() };
+    save();
+  },
+  "POST /api/study/resume": async () => {
+    if (!data.paused) throw new Error("Nothing is paused");
+    data.paused = null;
+    data.activeStudy ??= Date.now();
+    save();
+  },
+  "POST /api/focus/start": async () => {
+    data.paused = null;
+    return focus.start();
+  },
   "POST /api/focus/skip": async () => focus.skip(),
   "POST /api/focus/stop": async () => focus.stop(),
   "POST /api/notify/test": async () => notifier.test(),
@@ -783,7 +930,7 @@ const routes = {
     };
     if (body.privacy) bools(data.settings.privacy, body.privacy, Object.keys(PRIVACY_DEFAULTS));
     if (body.notify) {
-      bools(data.settings.notify, body.notify, ["on", "goal", "budget", "focus", "quests", "nudge", "recap"]);
+      bools(data.settings.notify, body.notify, ["on", "goal", "budget", "focus", "quests", "nudge", "recap", "auto", "weekly"]);
       if (/^([01]\d|2[0-3]):[0-5]\d$/.test(body.notify.recapAt ?? "")) data.settings.notify.recapAt = body.notify.recapAt;
       if (body.notify.breakAfter != null) data.settings.notify.breakAfter = clamp(body.notify.breakAfter, 0, 600);
       if (/^([01]\d|2[0-3]):[0-5]\d$/.test(body.notify.nudgeAt ?? "")) data.settings.notify.nudgeAt = body.notify.nudgeAt;
@@ -814,6 +961,42 @@ const routes = {
       if (body.games.addIgnore && exe(body.games.addIgnore)) g.ignore = [...new Set([...g.ignore, exe(body.games.addIgnore)])];
       if (body.games.removeIgnore) g.ignore = g.ignore.filter((x) => x !== String(body.games.removeIgnore).toLowerCase());
       setTimeout(scanGames, 100); // apply right away
+    }
+    if (body.autoStudy) {
+      const a = data.settings.autoStudy;
+      if (typeof body.autoStudy.on === "boolean") a.on = body.autoStudy.on;
+      if (typeof body.autoStudy.stop === "boolean") a.stop = body.autoStudy.stop;
+      if (body.autoStudy.add) {
+        const exe = String(body.autoStudy.add.exe ?? "").trim().toLowerCase();
+        if (!/^[\w .()+-]{1,80}\.exe$/.test(exe)) throw new Error("Pick a program (.exe) to add");
+        const name = String(body.autoStudy.add.name ?? "").trim().slice(0, 60) || exe.replace(/\.exe$/, "");
+        const subject = body.autoStudy.add.subject ? checkSubject(body.autoStudy.add.subject) : null;
+        a.apps = [...a.apps.filter((x) => x.exe !== exe), { exe, name, subject }];
+        if (a.apps.length > 20) throw new Error("You can add up to 20 study apps");
+        if (studyAppsOpen && games.running().includes(exe)) studyAppsOpen.push(exe); // already open: wait for the next launch
+      }
+      if (body.autoStudy.remove) a.apps = a.apps.filter((x) => x.exe !== String(body.autoStudy.remove).toLowerCase());
+    }
+    if (body.status) {
+      const st = data.settings.status;
+      const clean = (v) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, 60);
+      if (body.status.text !== undefined) st.text = clean(body.status.text) || null;
+      if (body.status.add) {
+        const t = clean(body.status.add);
+        if (!t) throw new Error("Type a status first");
+        if (!st.presets.includes(t)) st.presets = [...st.presets, t].slice(-12);
+      }
+      if (body.status.remove) {
+        st.presets = st.presets.filter((p) => p !== body.status.remove);
+        if (st.text === body.status.remove) st.text = null;
+      }
+    }
+    if (body.subjectGoal) {
+      const subject = checkSubject(body.subjectGoal.subject);
+      if (!subject) throw new Error("Pick a subject");
+      const min = Math.round(Number(body.subjectGoal.minutes));
+      if (min > 0) data.settings.subjectGoals[subject] = clamp(min, 1, 10_080);
+      else delete data.settings.subjectGoals[subject];
     }
     if (body.focus) {
       const f = data.settings.focus;

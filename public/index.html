@@ -70,6 +70,11 @@
           <dd id="playToday">0h 00m</dd>
           <div class="seg seg-sm play" id="playSeg"></div>
           <small id="playTxt">of 2h 00m budget</small>
+          <div class="now-play" id="nowPlay" hidden data-raw>
+            <span class="np-ic" id="npIc"></span>
+            <span class="np-txt"><small>Playing now</small><b id="npName"></b></span>
+            <span class="np-time" id="npTime"></span>
+          </div>
         </div>
         <div class="stat"><dt>This week</dt><dd id="weekTotal">0h 00m</dd><small id="streak">no streak yet</small></div>
       </dl>
@@ -98,7 +103,10 @@
             <div><b id="sessCount">0</b><span>sessions</span></div>
             <div><b id="sessLong">0m</b><span>longest session</span></div>
           </div>
-          <button class="cta" id="studyBtn"><span id="studyBtnText">Start studying</span><kbd>Space</kbd></button>
+          <div class="cta-row">
+            <button class="cta" id="studyBtn"><span id="studyBtnText">Start studying</span><kbd>Space</kbd></button>
+            <button type="button" class="btn-ghost side-btn" id="pauseBtn" hidden title="Pause (P)">Pause</button>
+          </div>
         </div>
 
         <div class="focus-view" id="focusView" hidden>
@@ -189,6 +197,7 @@
         </h2>
         <div class="stack" id="subjStack"></div>
         <ul class="legend" id="subjLegend" data-raw></ul>
+        <div class="subj-goals" id="subjGoals"></div>
         <p class="hint subj-hint">Click a subject to study it next · or press <kbd>1</kbd>–<kbd>9</kbd></p>
         <form class="add" id="subjForm">
           <input id="subjIn" maxlength="24" placeholder="Add a subject" required>
@@ -247,12 +256,16 @@
             </div>
           </div>
         </div>
+        <label class="status-pick">
+          <span>Status</span>
+          <select id="statusPick" class="sel" aria-label="Status on your Discord card" data-raw></select>
+        </label>
         <p class="hint" id="dcHint"></p>
       </article>
 
       <!-- week -->
       <article class="card c-week">
-        <h2><span>09</span>Last 7 days</h2>
+        <h2><span>09</span>Last 7 days <button type="button" class="h2-link" id="weekReportBtn">Weekly report →</button></h2>
         <div class="chart" id="chart"><div class="goal-line" id="goalLine"><span>goal</span></div></div>
       </article>
 
@@ -349,6 +362,7 @@
         <button type="button" class="set-tab" data-pane="notify" role="tab"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span>Notifications</span></button>
         <button type="button" class="set-tab" data-pane="appearance" role="tab"><svg viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 22a10 10 0 1 1 10-10c0 3-2 4-4 4h-2a2 2 0 0 0-1.5 3.3A2 2 0 0 1 12 22z"/></svg><span>Appearance</span></button>
         <button type="button" class="set-tab" data-pane="games" role="tab"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 11v3M5.5 12.5h3M15 12h.01M18 13h.01"/></svg><span>Games</span></button>
+        <button type="button" class="set-tab" data-pane="auto" role="tab"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>Auto-start</span></button>
         <button type="button" class="set-tab" data-pane="app" role="tab"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg><span>App</span></button>
         <button type="button" class="set-tab" data-pane="updates" role="tab"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></svg><span>Updates</span></button>
         <button type="button" class="set-tab" data-pane="connections" role="tab"><svg viewBox="0 0 24 24"><path d="M9 15l6-6"/><path d="M11 6l1-1a4 4 0 0 1 6 6l-1 1M13 18l-1 1a4 4 0 0 1-6-6l1-1"/></svg><span>Connections</span></button>
@@ -404,6 +418,11 @@
               <button type="button" data-min="240">4h</button>
             </div>
             <label class="custom-min">Custom <input type="number" id="budgetIn" min="1" step="1" inputmode="numeric"> <span>minutes</span></label>
+          </div>
+          <div class="set-card">
+            <b>Weekly subject goals</b>
+            <p>Hours per week (Monday to Sunday) for any subject. Progress shows in the Subjects card. Leave empty for no goal.</p>
+            <ul class="sg-list" id="sgList" data-raw></ul>
           </div>
         </section>
 
@@ -495,6 +514,15 @@
               <p class="pv-hidden" id="pvHidden" hidden>Nothing is shown on Discord.</p>
             </div>
           </div>
+          <div class="set-card">
+            <b>Custom status</b>
+            <p>Your own line on the Discord card, like “cramming for finals”. It replaces “locked in” / “on break”. Click one to use it, click again to go back to automatic. You can also switch it from the dashboard's Discord card.</p>
+            <div class="status-chips" id="stChips" data-raw></div>
+            <form class="add status-add" id="stForm">
+              <input id="stIn" maxlength="60" placeholder="Add a status, e.g. grinding chemistry" required>
+              <button type="submit">Add</button>
+            </form>
+          </div>
         </section>
 
         <section class="set-pane" data-pane="notify">
@@ -510,7 +538,7 @@
               <input type="checkbox" id="nt-goal" role="switch">
             </label>
             <label class="switch-row">
-              <span><b>Game budget used up</b><small>When today's play time goes over your budget.</small></span>
+              <span><b>Game budget</b><small>A heads-up 15 minutes before your budget runs out, and again when you go over.</small></span>
               <input type="checkbox" id="nt-budget" role="switch">
             </label>
             <label class="switch-row">
@@ -520,6 +548,14 @@
             <label class="switch-row">
               <span><b>Quests completed</b><small>Each quest, plus the bonus for clearing all 3.</small></span>
               <input type="checkbox" id="nt-quests" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Auto-start</b><small>When a study app starts or stops your timer.</small></span>
+              <input type="checkbox" id="nt-auto" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Weekly report</b><small>Monday morning: how last week went.</small></span>
+              <input type="checkbox" id="nt-weekly" role="switch">
             </label>
             <div class="switch-row static">
               <span><b>Break reminder</b><small>A nudge to rest after studying nonstop for a while (not in focus mode).</small></span>
@@ -606,6 +642,31 @@
           </div>
         </section>
 
+        <section class="set-pane" data-pane="auto">
+          <div class="set-card rows master">
+            <label class="switch-row">
+              <span><b>Start studying when a study app opens</b><small>Open VS Code, Notion, Anki… and the timer starts by itself, with that app's subject.</small></span>
+              <input type="checkbox" id="asOn" role="switch">
+            </label>
+            <label class="switch-row">
+              <span><b>Stop when they close</b><small>Ends the session once all your study apps are closed. Only for sessions started this way.</small></span>
+              <input type="checkbox" id="asStop" role="switch">
+            </label>
+          </div>
+          <div class="set-card">
+            <b>Your study apps</b>
+            <p>Open the app first, then pick it here. Apps that are already open when you add them start the timer the next time you open them.</p>
+            <ul class="prog-list" id="asList" data-raw></ul>
+            <div class="add-prog as-add">
+              <select id="asPick" class="sel" aria-label="Running program"><option value="">Choose a running program…</option></select>
+              <button type="button" class="btn-ghost" id="asRefresh" title="Reload the list of running programs">↻</button>
+              <input id="asName" class="sel" maxlength="60" placeholder="Name it (e.g. VS Code)">
+              <select id="asSubject" class="sel" aria-label="Subject" data-raw><option value="">No subject</option></select>
+              <button type="button" class="btn-solid" id="asAdd">Add</button>
+            </div>
+          </div>
+        </section>
+
         <section class="set-pane" data-pane="app">
           <div class="set-card rows" id="desktopCard">
             <label class="switch-row">
@@ -669,8 +730,10 @@
         <section class="set-pane" data-pane="shortcuts">
           <dl class="keys set-card">
             <div><dt><kbd>Space</kbd></dt><dd>Start / stop studying</dd></div>
+            <div><dt><kbd>P</kbd></dt><dd>Pause / resume</dd></div>
             <div><dt><kbd>1</kbd> – <kbd>9</kbd></dt><dd>Pick a subject (press again to clear)</dd></div>
             <div><dt><kbd>A</kbd></dt><dd>Add minutes you forgot to track</dd></div>
+            <div><dt><kbd>W</kbd></dt><dd>Weekly report</dd></div>
             <div><dt><kbd>G</kbd></dt><dd>Open settings</dd></div>
             <div><dt><kbd>C</kbd></dt><dd>Discord &amp; Steam connections</dd></div>
             <div><dt><kbd>?</kbd></dt><dd>Shortcut list</dd></div>
@@ -687,8 +750,10 @@
       <h2><span>?</span>Keyboard shortcuts</h2>
       <dl class="keys">
         <div><dt><kbd>Space</kbd></dt><dd>Start / stop studying</dd></div>
+        <div><dt><kbd>P</kbd></dt><dd>Pause / resume</dd></div>
         <div><dt><kbd>1</kbd> – <kbd>9</kbd></dt><dd>Pick a subject (press again to clear)</dd></div>
         <div><dt><kbd>A</kbd></dt><dd>Add minutes you forgot to track</dd></div>
+        <div><dt><kbd>W</kbd></dt><dd>Weekly report</dd></div>
         <div><dt><kbd>G</kbd></dt><dd>Goals &amp; settings</dd></div>
         <div><dt><kbd>C</kbd></dt><dd>Discord &amp; Steam connections</dd></div>
         <div><dt><kbd>?</kbd></dt><dd>This list</dd></div>
@@ -698,6 +763,27 @@
   </dialog>
 
   <!-- long-session check -->
+  <dialog id="weekDlg" class="week-dlg" aria-labelledby="wkTitle">
+    <form method="dialog">
+      <div class="wk-head">
+        <h2 id="wkTitle"><span>W</span>Weekly report</h2>
+        <span class="tabs" id="wkTabs" role="tablist">
+          <button type="button" class="on" data-w="last">Last week</button>
+          <button type="button" data-w="current">This week</button>
+        </span>
+      </div>
+      <p class="wk-range" id="wkRange"></p>
+      <div class="wk-hero">
+        <div><b id="wkTotal">0h 00m</b><span>studied</span></div>
+        <em id="wkChange"></em>
+      </div>
+      <div class="wk-bars" id="wkBars"></div>
+      <div class="wk-grid" id="wkGrid"></div>
+      <div class="wk-subjects" id="wkSubjects" data-raw></div>
+      <div class="dialog-actions"><button class="solid">Close</button></div>
+    </form>
+  </dialog>
+
   <dialog id="still">
     <form method="dialog">
       <h2><span>!</span>Still studying?</h2>

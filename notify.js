@@ -4,7 +4,7 @@
 //   - Everywhere: an in-app "inbox" the dashboard shows as toasts (used when there are no Windows toasts).
 import { execFile } from "node:child_process";
 
-export const NOTIFY_DEFAULTS = { on: true, goal: true, budget: true, focus: true, quests: true, breakAfter: 90, nudge: false, nudgeAt: "19:00", recap: false, recapAt: "21:30" };
+export const NOTIFY_DEFAULTS = { on: true, goal: true, budget: true, focus: true, quests: true, breakAfter: 90, nudge: false, nudgeAt: "19:00", recap: false, recapAt: "21:30", auto: true, weekly: true };
 
 // Windows PowerShell can raise toasts through the WinRT API. Text and paths go in via env vars
 // and createTextNode, so nothing user-typed is ever spliced into the script.
@@ -50,7 +50,9 @@ export function createNotifier({ windowsToasts, iconPath, getSettings }) {
  * and the optional "haven't studied today" nudge. Each fires once (per day / per session).
  * @param facts () => { day, studyMin, goal, played, budget, activeSince, focusing }
  */
-export function startReminders({ data, save, notify, facts, getSettings, recap }) {
+export const BUDGET_HEADS_UP = 15; // minutes
+
+export function startReminders({ data, save, notify, facts, getSettings, recap, weekly }) {
   const hm = (m) => `${Math.floor(m / 60)}h ${String(Math.floor(m % 60)).padStart(2, "0")}m`;
   setInterval(() => {
     const s = { ...NOTIFY_DEFAULTS, ...getSettings() };
@@ -65,7 +67,15 @@ export function startReminders({ data, save, notify, facts, getSettings, recap }
     };
 
     if (f.studyMin >= f.goal) once("goal", "goal", "Daily goal reached", `${hm(f.studyMin)} studied today. That's the grind.`);
+    // a heads-up before the budget runs out, then the "used up" one
+    if (f.budget > BUDGET_HEADS_UP && f.played >= f.budget - BUDGET_HEADS_UP && f.played <= f.budget) {
+      once("budget-soon", "budget", `${BUDGET_HEADS_UP} minutes of game time left`, `${hm(f.played)} played of your ${hm(f.budget)} budget today. Good time to wrap up the match.`);
+    }
     if (f.played > f.budget) once("budget", "budget", "Game budget used up", `${hm(f.played)} played today, ${hm(f.played - f.budget)} over your ${hm(f.budget)} budget.`);
+
+    // Monday morning: how last week went
+    const now = new Date();
+    if (s.weekly && weekly && now.getDay() === 1 && now.getHours() >= 9) once("weekly", "weekly", "Your week in review", weekly());
 
     // long session without a break (focus mode has its own breaks)
     if (s.breakAfter > 0 && f.activeSince && !f.focusing) {
@@ -77,13 +87,11 @@ export function startReminders({ data, save, notify, facts, getSettings, recap }
     // end-of-day summary at the chosen time
     if (s.recap && recap) {
       const [h, m] = s.recapAt.split(":").map(Number);
-      const now = new Date();
       if (now.getHours() * 60 + now.getMinutes() >= h * 60 + m) once("recap", "recap", "Today's recap", recap());
     }
 
     if (s.nudge && f.studyMin < 1) {
       const [h, m] = s.nudgeAt.split(":").map(Number);
-      const now = new Date();
       if (now.getHours() * 60 + now.getMinutes() >= h * 60 + m) once("nudge", "nudge", "No study yet today", "Even 25 minutes keeps your streak alive. Hit Start when you're ready.");
     }
   }, 20_000).unref();

@@ -42,6 +42,7 @@ export function createGameDetector({ cacheFile, getSettings }) {
   let db = null; // exe basename -> { name, id, icon }
   let updatedAt = 0;
   let loading = null;
+  let lastRunning = []; // every program seen by the last scan (auto-start studying reads this too)
 
   async function refresh() {
     try {
@@ -81,9 +82,10 @@ export function createGameDetector({ cacheFile, getSettings }) {
   /** The game that's running now ({ name, exe, icon, source }) or null. Your own programs win over the list. */
   async function scan() {
     const s = getSettings();
+    const running = await runningPrograms();
+    lastRunning = running;
     if (s.detect === false) return null;
     await ensureDb();
-    const running = await runningPrograms();
     const ignore = new Set((s.ignore ?? []).map((x) => x.toLowerCase()));
     const custom = new Map((s.custom ?? []).map((c) => [c.exe.toLowerCase(), c.name]));
     for (const exe of running) if (custom.has(exe) && !ignore.has(exe)) return { name: custom.get(exe), exe, icon: null, source: "custom" };
@@ -97,5 +99,5 @@ export function createGameDetector({ cacheFile, getSettings }) {
     return (await runningPrograms()).filter((e) => e.endsWith(".exe") && !skip.test(e) && !GENERIC.has(e)).sort();
   }
 
-  return { scan, candidates, info: () => ({ games: db ? Object.keys(db).length : 0, updatedAt }) };
+  return { scan, candidates, running: () => lastRunning, info: () => ({ games: db ? Object.keys(db).length : 0, updatedAt }) };
 }

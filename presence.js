@@ -91,11 +91,15 @@ export function buildActivity(stats, largeImage, privacy = {}) {
   const goalPct = study.todayMs / 60000 / study.goalMinutes;
   const subject = p.subject && study.subject ? ` · ${study.subject.toLowerCase()}` : "";
 
+  // your own status line ("cramming for finals") replaces the mode label, except in focus phases
+  const custom = stats.prefs?.status?.text;
   let label;
   if (focus?.phase === "focus") label = `focus ${focus.round + 1}/${focus.every}${subject}`;
   else if (focus?.phase === "short" || focus?.phase === "long") label = focus.phase === "long" ? "long break" : "short break";
+  else if (custom) label = custom;
   else if (mode === "study") label = `locked in${subject}`;
   else if (mode === "gaming") label = p.game ? `in ${game.name.toLowerCase()}` : "gaming";
+  else if (study.pausedAt) label = `paused${subject}`;
   else label = "on break";
 
   const activity = { type: 0, state: (p.goal ? `${label}  ${bar(goalPct)}  ${Math.round(goalPct * 100)}%` : label).slice(0, 128) };
@@ -105,6 +109,15 @@ export function buildActivity(stats, largeImage, privacy = {}) {
     p.level && stats.progress && `lv ${stats.progress.level}`,
   ].filter(Boolean);
   if (details.length) activity.details = details.join("  ·  ");
+
+  // In a game, the game is the headline: the top line is its name, and your status in the member
+  // list reads "Playing Elden Ring" instead of "Playing grind tracker" (status display type 2 = details).
+  if (mode === "gaming" && p.game && !focus?.endsAt) {
+    activity.details = game.name.slice(0, 128);
+    const line = [p.playTime && `${hm(played.todayMinutes)} played today`, p.studyTime && `${hm(study.todayMs / 60000)} studied`, p.level && stats.progress && `lv ${stats.progress.level}`].filter(Boolean);
+    activity.state = (custom || line.join("  ·  ") || "playing").slice(0, 128);
+    activity.statusDisplayType = 2;
+  }
 
   if (p.timer) {
     // focus/break phases count down; everything else counts up
@@ -120,6 +133,7 @@ export function buildActivity(stats, largeImage, privacy = {}) {
     if (big) {
       activity.largeImageKey = big;
       const hover = [
+        activity.statusDisplayType === 2 && `playing ${game.name}`,
         p.level && stats.progress && `lv ${stats.progress.level} ${stats.progress.rank.toLowerCase()}`,
         p.goal && `${p.studyTime ? `${hm(study.todayMs / 60000)} of ` : ""}${hm(study.goalMinutes)} goal`,
       ].filter(Boolean);

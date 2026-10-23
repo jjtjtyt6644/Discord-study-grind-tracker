@@ -5,6 +5,8 @@ const hm = (min) => {
   min = Math.max(0, Math.floor(min));
   return `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m`;
 };
+// "7m" under an hour, "1h 05m" after
+const mins = (m) => (m < 60 ? `${Math.floor(Math.max(0, m))}m` : hm(m));
 const hms = (ms) => {
   const s = Math.max(0, Math.floor(ms / 1000));
   return [s / 3600, (s / 60) % 60, s % 60].map((n) => String(Math.floor(n)).padStart(2, "0")).join(":");
@@ -118,7 +120,7 @@ function render() {
   const { mode, study, played, steam, steamError, discord } = stats;
   document.body.dataset.mode = mode;
   BG.setMode(mode);
-  $("modeLabel").textContent = mode === "study" ? "LOCKED IN" : mode === "gaming" ? (stats.game ? `IN ${stats.game.name.toUpperCase()}`.slice(0, 32) : "IN GAME") : "ON BREAK";
+  $("modeLabel").textContent = mode === "study" ? "LOCKED IN" : mode === "gaming" ? (stats.game ? `IN ${stats.game.name.toUpperCase()}`.slice(0, 32) : "IN GAME") : study.pausedAt ? "PAUSED" : "ON BREAK";
   $("plateMode").textContent = PLATE[mode];
   if (mode !== lastMode) {
     say(mode);
@@ -137,12 +139,25 @@ function render() {
   $("playToday").textContent = hm(playMin);
   setSeg($("playSeg"), playMin / played.budgetMinutes, 12);
   $("playSeg").classList.toggle("over", over);
-  $("playTxt").textContent = over ? `${hm(playMin - played.budgetMinutes)} over budget` : `of ${hm(played.budgetMinutes)} budget`;
+  const left = played.budgetMinutes - playMin;
+  const soon = !over && left <= 15 && played.budgetMinutes > 15;
+  $("playTxt").textContent = over ? `${hm(playMin - played.budgetMinutes)} over budget` : soon ? `only ${hm(left)} left of ${hm(played.budgetMinutes)}` : `of ${hm(played.budgetMinutes)} budget`;
+  $("playTxt").classList.toggle("warn", soon);
   $("goalTxt").textContent = `of ${hm(study.goalMinutes)} goal`;
+  renderNowPlaying();
 
-  // session button
+  // session buttons: Start → (End | Pause) → paused: (Resume | End)
+  const paused = !study.activeSince && study.pausedAt;
   $("studyBtn").classList.toggle("running", !!study.activeSince);
-  $("studyBtnText").textContent = study.activeSince ? "End session" : "Start studying";
+  $("studyBtn").classList.toggle("paused", !!paused);
+  $("studyBtnText").textContent = study.activeSince ? "End session" : paused ? "Resume" : "Start studying";
+  const inFocus = stats.focus?.phase === "focus";
+  $("pauseBtn").hidden = !(study.activeSince || paused) || inFocus;
+  $("pauseBtn").textContent = paused ? "End" : "Pause";
+  $("pauseBtn").title = paused ? "End the session (it's already saved)" : "Pause (P)";
+  renderStatusPick();
+  renderSubjectGoals();
+  $("weekReportBtn").classList.toggle("new", weekReportIsNew());
 
   renderSteam(steam);
   renderAchievements();
@@ -274,19 +289,23 @@ function renderSteam(steam) {
   $("lifetime").textContent = steam.totalHours.toLocaleString();
 
   const now = $("now");
-  const g = p.currentGame ?? steam.recent[0];
-  const key = String(p.currentGame ? `live-${g.appid}` : `last-${g?.appid}`);
+  // a game from another launcher (detected on your PC) shows here too while you play it
+  const other = !p.currentGame && stats.game && stats.game.source !== "steam" ? stats.game : null;
+  const g = p.currentGame ?? other ?? steam.recent[0];
+  const key = String(p.currentGame ? `live-${g.appid}` : other ? `pc-${other.name}` : `last-${g?.appid}`);
   if (now.dataset.key === key) return;
   now.dataset.key = key;
-  now.classList.toggle("live", !!p.currentGame);
+  now.classList.toggle("live", !!(p.currentGame || other));
+  now.classList.toggle("detected", !!other);
   if (!g) return now.replaceChildren(el("div", "empty", "No recent games."));
   const img = el("img");
-  img.src = g.header;
+  img.src = other ? (other.icon ?? "") : g.header;
   img.alt = "";
   img.onerror = () => img.remove();
+  if (other && !other.icon) img.remove();
   const cap = el("div", "cap");
-  cap.append(el("small", null, p.currentGame ? "● NOW PLAYING" : "LAST PLAYED"), document.createTextNode(g.name));
-  now.replaceChildren(img, cap);
+  cap.append(el("small", null, p.currentGame ? "● NOW PLAYING" : other ? "● NOW PLAYING · NOT ON STEAM" : "LAST PLAYED"), document.createTextNode(g.name));
+  now.replaceChildren(...(other && !other.icon ? [] : [img]), cap);
 }
 
 // rarity tiers by % of all Steam players who have the achievement
@@ -488,12 +507,22 @@ function renderWeek(week, goal) {
 
   const total = week.reduce((s, d, i) => s + minutesFor(d, i), 0);
   $("weekTotal").textContent = hm(total);
-  let streak = 0;
-  for (let i = week.length - 1; i >= 0; i--) {
-    if (minutesFor(week[i], i) > 0) streak++;
-    else if (i !== week.length - 1) break;
-  }
-  $("streak").textContent = streak ? `${streak}-day streak` : "no streak yet";
+  renderStreak();
+}
+
+// streak + streak freezes (worked out on the server from your whole history)
+function renderStreak() {
+  const s = stats.streak ?? { days: 0, freezes: 0 };
+  const box = $("streak");
+  const sig = JSON.stringify([s.days, s.freezes, s.frozen?.length, s.nextIn]);
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  box.replaceChildren(s.days ? `${s.days}-day streak` : "no streak yet");
+  if (s.freezes) box.append(" ", el("span", "freeze", `❄ ${s.freezes}`));
+  box.title =
+    `Streak freezes: ${s.freezes}/${s.max ?? 3}. You earn one for every ${s.every ?? 7} days you hit your goal (${s.nextIn} more to the next one). ` +
+    `A day with no study uses one automatically, so your streak survives it.` +
+    (s.frozen?.length ? ` Saved by a freeze: ${s.frozen.map((d) => new Date(`${d}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" })).join(", ")}.` : "");
 }
 
 function renderDiscord(d) {
@@ -522,6 +551,154 @@ function renderDiscord(d) {
     }
   }
 }
+
+// the game you're in right now (Steam or detected on your PC), under "Played today"
+function renderNowPlaying() {
+  const g = stats.game;
+  const box = $("nowPlay");
+  box.hidden = !g;
+  if (!g || box.dataset.name === g.name + g.icon) return;
+  box.dataset.name = g.name + g.icon;
+  $("npName").textContent = g.name;
+  const ic = $("npIc");
+  ic.replaceChildren(g.name.slice(0, 1));
+  if (g.icon) {
+    const i = el("img");
+    i.src = g.icon;
+    i.alt = "";
+    i.onload = () => ic.replaceChildren(i);
+  }
+}
+
+// Discord card → "Status": your own line instead of "locked in" / "on break"
+function renderStatusPick() {
+  const st = stats.prefs?.status ?? { presets: [] };
+  const pick = $("statusPick");
+  const sig = JSON.stringify(st);
+  if (pick.dataset.sig === sig || document.activeElement === pick) return;
+  pick.dataset.sig = sig;
+  const opt = (value, text) => Object.assign(el("option", null, text), { value });
+  const list = [...new Set([...st.presets, ...(st.text ? [st.text] : [])])];
+  pick.replaceChildren(opt("", "Automatic"), ...list.map((t) => opt(t, t)), opt("__edit", "Edit statuses…"));
+  pick.value = st.text ?? "";
+}
+$("statusPick").addEventListener("change", (e) => {
+  const v = e.target.value;
+  if (v === "__edit") {
+    e.target.value = stats.prefs?.status?.text ?? "";
+    openSettings("privacy");
+    $("stChips").scrollIntoView({ block: "center" });
+    return;
+  }
+  saveSetting({ status: { text: v } }, v ? `Discord now says “${v}”` : "Status back to automatic");
+});
+
+// Subjects card: this week's progress toward each weekly subject goal
+function renderSubjectGoals() {
+  const box = $("subjGoals");
+  const goals = stats.subjects.goals ?? [];
+  const sig = JSON.stringify(goals.map((g) => [g.subject, g.goal, Math.floor(g.done)]));
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  const setBtn = (text) => {
+    const b = el("button", "sg-set", text);
+    b.type = "button";
+    b.addEventListener("click", () => openSettings("goals"));
+    return b;
+  };
+  if (!goals.length) return box.replaceChildren(setBtn("+ Set weekly subject goals"));
+  const head = el("div", "sg-head");
+  head.append(el("span", null, "This week's goals"), setBtn("Edit"));
+  const short = (m) => hm(m).replace(/ 00m$/, "").replace(/^0h /, "");
+  box.replaceChildren(
+    head,
+    ...goals.map((g) => {
+      const row = el("div", "sg-row" + (g.done >= g.goal ? " done" : ""));
+      row.style.setProperty("--c", colorFor(g.subject));
+      const bar = el("i");
+      const fill = el("b");
+      fill.style.width = `${Math.min(100, (g.done / g.goal) * 100)}%`;
+      bar.append(fill);
+      row.append(el("span", "nm", g.subject), bar, el("span", "mn", g.done >= g.goal ? `✓ ${short(g.done)}` : `${short(g.done)} / ${short(g.goal)}`));
+      return row;
+    })
+  );
+}
+
+/* ================= weekly report ================= */
+let wkView = "last";
+const weekReportIsNew = () => {
+  const r = stats.weekly?.last;
+  return Boolean(r?.studyMin) && new Date().getDay() === 1 && store.get("gt-week-seen") !== r.from;
+};
+
+function openWeekReport(view = "last") {
+  wkView = view;
+  renderWeekReport();
+  if (!$("weekDlg").open) $("weekDlg").showModal();
+  if (stats.weekly?.last) store.set("gt-week-seen", stats.weekly.last.from);
+  $("weekReportBtn").classList.remove("new");
+}
+
+function renderWeekReport() {
+  const r = stats.weekly?.[wkView];
+  if (!r) return;
+  document.querySelectorAll("#wkTabs button").forEach((b) => b.classList.toggle("on", b.dataset.w === wkView));
+  const fmt = (k, o) => new Date(`${k}T12:00`).toLocaleDateString(undefined, o);
+  $("wkRange").textContent = `${fmt(r.from, { day: "numeric", month: "short" })} – ${fmt(r.to, { day: "numeric", month: "short" })}${wkView === "current" ? " · so far" : ""}`;
+  $("wkTotal").textContent = hm(r.studyMin);
+  const ch = $("wkChange");
+  if (r.prevStudyMin) {
+    const pct = Math.round(((r.studyMin - r.prevStudyMin) / r.prevStudyMin) * 100);
+    ch.textContent = `${pct >= 0 ? "▲" : "▼"} ${Math.abs(pct)}% vs the week before (${hm(r.prevStudyMin)})`;
+    ch.className = pct >= 0 ? "up" : "down";
+  } else {
+    ch.textContent = r.studyMin ? "Your first tracked week" : "Nothing tracked this week yet";
+    ch.className = "";
+  }
+  const goal = stats.study.goalMinutes;
+  const max = Math.max(1, goal, ...r.days.map((d) => d.minutes));
+  $("wkBars").replaceChildren(
+    ...r.days.map((d) => {
+      const col = el("div", "wb" + (d.minutes >= goal ? " hit" : "") + (r.best?.date === d.date ? " best" : ""));
+      const bar = el("i");
+      bar.style.height = `${(d.minutes / max) * 100}%`;
+      col.title = `${fmt(d.date, { weekday: "long" })}: ${hm(d.minutes)}`;
+      col.append(bar, el("span", null, fmt(d.date, { weekday: "short" }).slice(0, 2)));
+      return col;
+    })
+  );
+  const cell = (value, label) => {
+    const d = el("div");
+    d.append(el("b", null, value), el("span", null, label));
+    return d;
+  };
+  $("wkGrid").replaceChildren(
+    cell(`${r.goalDays}/7`, "goal days"),
+    cell(r.best ? fmt(r.best.date, { weekday: "short" }) : "-", r.best ? `best day · ${hm(r.best.minutes)}` : "best day"),
+    cell(hm(r.playedMin), "played"),
+    cell(String(r.sessions), "sessions"),
+    cell(String(r.focusRounds), "focus rounds"),
+    cell(`${r.questDays}/7`, "quest days")
+  );
+  const total = r.subjects.reduce((s, x) => s + x.minutes, 0);
+  $("wkSubjects").replaceChildren(
+    ...(r.subjects.length ? [el("small", null, "Top subjects")] : []),
+    ...r.subjects.map((x) => {
+      const row = el("div", "ws");
+      row.style.setProperty("--c", colorFor(x.name));
+      const bar = el("i");
+      const fill = el("b");
+      fill.style.width = `${total ? (x.minutes / total) * 100 : 0}%`;
+      bar.append(fill);
+      row.append(el("span", null, x.name), bar, el("em", null, hm(x.minutes)));
+      return row;
+    })
+  );
+  window.GT_vocab(stats.prefs?.activity);
+}
+$("weekReportBtn").addEventListener("click", () => openWeekReport());
+document.querySelectorAll("#wkTabs button").forEach((b) => b.addEventListener("click", () => openWeekReport(b.dataset.w)));
 
 /* ================= subjects ================= */
 const SUBJECT_COLORS = ["#b794ff", "#5eead4", "#ffb454", "#ff6b8b", "#60a5fa", "#a3e635", "#f472b6", "#facc15", "#38bdf8", "#fb923c", "#c084fc", "#4ade80"];
@@ -893,9 +1070,12 @@ function tick() {
   setSeg($("goalSeg"), pct, 20);
   $("goalPct").textContent = `${Math.round(pct * 100)}%`;
   renderTimer(hms(study.activeSince ? nowServer - study.activeSince : 0), !study.activeSince);
+  const at = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   $("timerSub").textContent = study.activeSince
-    ? `session started ${new Date(study.activeSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${study.subject ? ` · ${study.subject}` : ""}`
+    ? `session started ${at(study.activeSince)}${study.subject ? ` · ${study.subject}` : ""}${study.autoStarted ? ` · auto-started by ${study.autoStarted}` : ""}`
+    : study.pausedAt ? `paused for ${mins((nowServer - study.pausedAt) / 60000)} · Resume to keep going`
     : study.subject ? `ready to study ${study.subject}` : "pick a subject, or just start";
+  if (stats.game?.since) $("npTime").textContent = mins((nowServer - stats.game.since) / 60000);
 
   if (goalCelebrated === null) goalCelebrated = pct >= 1;
   if (!goalCelebrated && pct >= 1) {
@@ -1086,7 +1266,7 @@ async function toggleStudy(e) {
   }
   btn.disabled = true;
   try {
-    apply(await api(stats?.study.activeSince ? "/api/study/stop" : "/api/study/start", {}));
+    apply(await api(stats?.study.activeSince ? "/api/study/stop" : stats?.study.pausedAt ? "/api/study/resume" : "/api/study/start", {}));
   } catch (err) {
     showNotice(err.message);
   } finally {
@@ -1094,6 +1274,24 @@ async function toggleStudy(e) {
   }
 }
 $("studyBtn").addEventListener("click", toggleStudy);
+
+// Pause while running; while paused the same button ends the session (it's already saved)
+async function pauseOrEnd() {
+  if (!stats) return;
+  const s = stats.study;
+  try {
+    if (s.activeSince) {
+      apply(await api("/api/study/pause", {}));
+      toast("Paused. Your time so far is saved");
+    } else if (s.pausedAt) {
+      apply(await api("/api/study/stop", {}));
+      toast("Session ended");
+    }
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+$("pauseBtn").addEventListener("click", pauseOrEnd);
 addEventListener("keydown", (e) => {
   if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
   const tag = document.activeElement?.tagName;
@@ -1112,6 +1310,11 @@ addEventListener("keydown", (e) => {
     e.preventDefault();
     $("addMin").scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
     $("addMin").focus({ preventScroll: true });
+  } else if ((e.key === "p" || e.key === "P") && stats && stats.focus?.phase !== "focus") {
+    if (stats.study.pausedAt && !stats.study.activeSince) toggleStudy(); // P again resumes
+    else if (stats.study.activeSince) pauseOrEnd();
+  } else if (e.key === "w" || e.key === "W") {
+    if (stats) openWeekReport();
   } else if (e.key === "g" || e.key === "G") {
     openSettings();
   } else if (e.key === "c" || e.key === "C") {
@@ -1428,7 +1631,7 @@ function showInbox() {
 
 /* ================= settings ================= */
 const settingsDlg = $("settings");
-const PANE_TITLES = { games: "Games", goals: "Goals", focus: "Focus timer", privacy: "Privacy", notify: "Notifications", appearance: "Appearance", app: "App", updates: "Updates", connections: "Connections", data: "Data & backups", shortcuts: "Keyboard shortcuts" };
+const PANE_TITLES = { games: "Games", auto: "Auto-start", goals: "Goals", focus: "Focus timer", privacy: "Privacy", notify: "Notifications", appearance: "Appearance", app: "App", updates: "Updates", connections: "Connections", data: "Data & backups", shortcuts: "Keyboard shortcuts" };
 
 function showPane(name) {
   document.querySelectorAll(".set-tab").forEach((t) => {
@@ -1548,6 +1751,10 @@ function renderSettings(full = false) {
   renderProgList("gIgnore", gs.ignore ?? [], (e) => [e, ""], (e) => saveSetting({ games: { removeIgnore: e } }), "");
   $("gIgnoreCard").hidden = !(gs.ignore ?? []).length;
 
+  renderSubjectGoalSettings();
+  renderStatusChips();
+  renderAutoStudy();
+
   // privacy
   const pv = stats.prefs?.privacy ?? {};
   for (const k of Object.keys(pv)) if ($(`pv-${k}`)) $(`pv-${k}`).checked = pv[k] !== false;
@@ -1556,7 +1763,7 @@ function renderSettings(full = false) {
 
   // notifications
   const nt = stats.prefs?.notify ?? {};
-  for (const k of ["on", "goal", "budget", "focus", "quests", "nudge"]) $(`nt-${k}`).checked = nt[k] !== false && (k !== "nudge" || nt.nudge === true);
+  for (const k of ["on", "goal", "budget", "focus", "quests", "nudge", "auto", "weekly"]) $(`nt-${k}`).checked = nt[k] !== false && (k !== "nudge" || nt.nudge === true);
   $("ntList").classList.toggle("off", nt.on === false);
   $("ntBreak").value = String(nt.breakAfter ?? 90);
   if (document.activeElement !== $("ntNudgeAt")) $("ntNudgeAt").value = nt.nudgeAt ?? "19:00";
@@ -1687,7 +1894,7 @@ function renderPrivacyPreview() {
 }
 
 // ---- notifications
-for (const k of ["on", "goal", "budget", "focus", "quests", "nudge", "recap"]) $(`nt-${k}`).addEventListener("change", (e) => saveSetting({ notify: { [k]: e.target.checked } }));
+for (const k of ["on", "goal", "budget", "focus", "quests", "nudge", "recap", "auto", "weekly"]) $(`nt-${k}`).addEventListener("change", (e) => saveSetting({ notify: { [k]: e.target.checked } }));
 $("ntRecapAt").addEventListener("change", (e) => e.target.value && saveSetting({ notify: { recapAt: e.target.value } }));
 
 // ---- weekend goal
@@ -1696,10 +1903,10 @@ $("wkIn").addEventListener("change", (e) => Number(e.target.value) >= 1 && saveS
 
 // ---- games
 $("gDetect").addEventListener("change", (e) => saveSetting({ games: { detect: e.target.checked } }));
-async function loadPrograms() {
+async function loadPrograms(id = "gPick") {
   try {
     const { list } = await api("/api/processes");
-    const pick = $("gPick");
+    const pick = $(id);
     const keep = pick.value;
     pick.replaceChildren(el("option", null, list.length ? "Choose a running program…" : "No programs found"), ...list.map((exe) => Object.assign(el("option", null, exe), { value: exe })));
     pick.firstChild.value = "";
@@ -1708,10 +1915,94 @@ async function loadPrograms() {
     toast(err.message, true);
   }
 }
-$("gRefresh").addEventListener("click", loadPrograms);
-$("gPick").addEventListener("focus", () => $("gPick").options.length <= 1 && loadPrograms());
-$("gPick").addEventListener("change", (e) => {
-  if (!$("gName").value && e.target.value) $("gName").value = e.target.value.replace(/\.exe$/i, "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+const niceName = (exe) => exe.replace(/\.exe$/i, "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+for (const [pick, refresh, name] of [["gPick", "gRefresh", "gName"], ["asPick", "asRefresh", "asName"]]) {
+  $(refresh).addEventListener("click", () => loadPrograms(pick));
+  $(pick).addEventListener("focus", () => $(pick).options.length <= 1 && loadPrograms(pick));
+  $(pick).addEventListener("change", (e) => {
+    if (!$(name).value && e.target.value) $(name).value = niceName(e.target.value);
+  });
+}
+
+// ---- weekly subject goals (Settings → Goals)
+function renderSubjectGoalSettings() {
+  const ul = $("sgList");
+  const goals = stats.prefs?.subjectGoals ?? {};
+  const sig = JSON.stringify([stats.subjects.list, goals]);
+  if (ul.dataset.sig === sig || ul.contains(document.activeElement)) return;
+  ul.dataset.sig = sig;
+  ul.replaceChildren(
+    ...stats.subjects.list.map((s) => {
+      const li = el("li");
+      const sw = el("span", "sw");
+      sw.style.background = colorFor(s);
+      const input = Object.assign(el("input"), { type: "number", min: "0", step: "0.5", placeholder: "-", value: goals[s] ? String(+(goals[s] / 60).toFixed(2)) : "" });
+      input.className = "sel";
+      input.setAttribute("aria-label", `${s}: hours per week`);
+      input.addEventListener("change", () => {
+        const h = Number(input.value) || 0;
+        saveSetting({ subjectGoal: { subject: s, minutes: Math.round(h * 60) } }, h > 0 ? `${s}: ${h}h a week` : `${s}: no weekly goal`);
+      });
+      li.append(sw, el("span", "nm", s), input, el("small", null, "h / week"));
+      return li;
+    })
+  );
+}
+
+// ---- custom Discord statuses (Settings → Privacy)
+function renderStatusChips() {
+  const st = stats.prefs?.status ?? { presets: [] };
+  const box = $("stChips");
+  const sig = JSON.stringify(st);
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  if (!st.presets.length) return box.replaceChildren(el("span", "muted", "No statuses yet. Add one below."));
+  box.replaceChildren(
+    ...st.presets.map((t) => {
+      const on = t === st.text;
+      const chip = el("span", "st-chip" + (on ? " on" : ""));
+      const use = el("button", null, t);
+      use.type = "button";
+      use.title = on ? "In use. Click to go back to automatic" : "Use this status";
+      use.addEventListener("click", () => saveSetting({ status: { text: on ? "" : t } }, on ? "Status back to automatic" : `Discord now says “${t}”`));
+      const rm = el("button", "rm", "×");
+      rm.type = "button";
+      rm.setAttribute("aria-label", `Remove ${t}`);
+      rm.addEventListener("click", () => saveSetting({ status: { remove: t } }));
+      chip.append(use, rm);
+      return chip;
+    })
+  );
+}
+$("stForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (await saveSetting({ status: { add: $("stIn").value } }, "Status added")) $("stIn").value = "";
+});
+
+// ---- auto-start studying (Settings → Auto-start)
+function renderAutoStudy() {
+  const a = stats.prefs?.autoStudy ?? { apps: [] };
+  $("asOn").checked = a.on !== false;
+  $("asStop").checked = a.stop !== false;
+  renderProgList("asList", a.apps, (x) => [x.name, `${x.exe}${x.subject ? ` · ${x.subject}` : ""}`], (x) => saveSetting({ autoStudy: { remove: x.exe } }), "No study apps yet.");
+  const sub = $("asSubject");
+  const sig = JSON.stringify(stats.subjects.list);
+  if (sub.dataset.sig === sig) return;
+  sub.dataset.sig = sig;
+  const keep = sub.value;
+  sub.replaceChildren(Object.assign(el("option", null, "No subject"), { value: "" }), ...stats.subjects.list.map((s) => Object.assign(el("option", null, s), { value: s })));
+  sub.value = stats.subjects.list.includes(keep) ? keep : "";
+}
+$("asOn").addEventListener("change", (e) => saveSetting({ autoStudy: { on: e.target.checked } }));
+$("asStop").addEventListener("change", (e) => saveSetting({ autoStudy: { stop: e.target.checked } }));
+$("asAdd").addEventListener("click", async () => {
+  const exe = $("asPick").value;
+  if (!exe) return toast("Choose a running program first", true);
+  const name = $("asName").value || niceName(exe);
+  if (await saveSetting({ autoStudy: { add: { exe, name, subject: $("asSubject").value || null } } }, `${name} will start your timer`)) {
+    $("asName").value = "";
+    $("asPick").value = "";
+  }
 });
 $("gAdd").addEventListener("click", async () => {
   const exe = $("gPick").value;
