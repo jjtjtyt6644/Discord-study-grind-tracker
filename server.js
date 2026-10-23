@@ -54,6 +54,7 @@ data.settings.weekendGoal ??= null; // minutes, or null = same as weekdays
 data.settings.autoStudy = { on: true, stop: true, apps: [], ...data.settings.autoStudy }; // apps: [{ exe, name, subject }]
 data.settings.status = { text: null, presets: ["cramming for finals", "deep work, no distractions", "studying with friends"], ...data.settings.status };
 data.settings.subjectGoals ??= {}; // subject -> minutes per week (Mon-Sun)
+data.settings.listStatus ??= "stats"; // what the member list shows after "Playing": stats | game | name
 data.paused ??= null; // { at } while a session is paused
 
 // Earned badges are kept for good (id -> when). The first time this runs, every backup is scored too,
@@ -638,14 +639,15 @@ async function buildStats() {
       update,
       dataDir: isDesktop ? APP_DIR : null,
     },
-    prefs: { privacy: data.settings.privacy, notify: data.settings.notify, theme: data.settings.theme, focus: data.settings.focus, activity: data.settings.activity, weekendGoal: data.settings.weekendGoal, weekdayGoal: data.settings.goalMinutes, status: data.settings.status, autoStudy: data.settings.autoStudy, subjectGoals: data.settings.subjectGoals },
+    prefs: { privacy: data.settings.privacy, notify: data.settings.notify, theme: data.settings.theme, focus: data.settings.focus, activity: data.settings.activity, weekendGoal: data.settings.weekendGoal, weekdayGoal: data.settings.goalMinutes, status: data.settings.status, listStatus: data.settings.listStatus, autoStudy: data.settings.autoStudy, subjectGoals: data.settings.subjectGoals },
     art: { bg: hasCustomArt("bg.jpg"), logo: hasCustomArt("logo-small.png"), v: artVersion },
     inbox: notifier.inbox(),
   };
   for (const b of stats.progress.badges) b.desc = words(b.desc);
   const activity = buildActivity(stats, process.env.LARGE_IMAGE, data.settings.privacy);
   // (a game's name is left exactly as it is)
-  if (activity) for (const k of ["details", "state", "largeImageText"]) if (activity[k] && !(k === "details" && activity.statusDisplayType === 2)) activity[k] = words(activity[k]);
+  const gameLine = stats.mode === "gaming" && stats.game;
+  if (activity) for (const k of ["details", "state", "largeImageText"]) if (activity[k] && !(k === "details" && gameLine)) activity[k] = words(activity[k]);
   stats.discord = { ...presenceState(), activity };
   return stats;
 }
@@ -750,7 +752,7 @@ const routes = {
   "POST /api/focus/stop": async () => focus.stop(),
   "POST /api/notify/test": async () => notifier.test(),
   // Settings → Games → "Add a program": what's running right now
-  "GET /api/processes": async () => ({ list: await games.candidates() }),
+  "GET /api/processes": async () => games.candidates(),
   "POST /api/games/rescan": async () => scanGames(),
   // a short note on a log entry ("chapter 4 problems")
   "POST /api/study/note": async (body) => {
@@ -945,6 +947,7 @@ const routes = {
       };
     }
     if (body.activity === "study" || body.activity === "work") data.settings.activity = body.activity;
+    if (["stats", "game", "name"].includes(body.listStatus)) data.settings.listStatus = body.listStatus;
     if (body.weekendGoal !== undefined) data.settings.weekendGoal = body.weekendGoal ? clamp(body.weekendGoal, 1, MAX_MINUTES) : null;
     if (body.games) {
       const g = data.settings.games;

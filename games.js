@@ -34,6 +34,24 @@ function runningPrograms() {
   });
 }
 
+/** Programs with a visible window, with its title ("Visual Studio Code", "Anki"…). Windows only. */
+function windowedPrograms() {
+  return new Promise((resolve) => {
+    if (process.platform !== "win32") return resolve([]);
+    const ps = "Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { $_.ProcessName + [char]9 + $_.MainWindowTitle }";
+    execFile("powershell", ["-NoProfile", "-NonInteractive", "-Command", ps], { windowsHide: true, timeout: 8000, maxBuffer: 1024 * 1024 }, (err, out) => {
+      if (err) return resolve([]);
+      resolve(
+        out
+          .split(/\r?\n/)
+          .map((l) => l.split("\t"))
+          .filter(([name, title]) => name && title)
+          .map(([name, title]) => ({ exe: `${name.trim().toLowerCase()}.exe`, title: title.trim().slice(0, 120) }))
+      );
+    });
+  });
+}
+
 /**
  * @param cacheFile   where the compact game list is kept
  * @param getSettings () => { detect, custom: [{exe, name}], ignore: [exe] }
@@ -93,10 +111,17 @@ export function createGameDetector({ cacheFile, getSettings }) {
     return null;
   }
 
-  /** For Settings → Games → "Add a program": what's running right now that could be a game. */
+  /**
+   * For "Add a program" pickers: { apps: [{ exe, title }], other: [exe] }. Apps with an open window
+   * (what you'd actually pick) come first with their window title; background programs follow.
+   */
   async function candidates() {
-    const skip = /^(system|registry|smss|csrss|wininit|services|lsass|svchost|fontdrvhost|winlogon|dwm|sihost|taskhostw|ctfmon|searchhost|startmenuexperiencehost|runtimebroker|textinputhost|shellexperiencehost|securityhealth|nvcontainer|nvdisplay|audiodg|spoolsv|wmiprvse|msmpeng|nissrv|tasklist|conhost|dllhost|memory compression|system idle process)/;
-    return (await runningPrograms()).filter((e) => e.endsWith(".exe") && !skip.test(e) && !GENERIC.has(e)).sort();
+    const skip = /^(system|registry|smss|csrss|wininit|services|lsass|svchost|fontdrvhost|winlogon|dwm|sihost|taskhostw|ctfmon|searchhost|startmenuexperiencehost|runtimebroker|textinputhost|shellexperiencehost|securityhealth|nvcontainer|nvdisplay|audiodg|spoolsv|wmiprvse|msmpeng|nissrv|tasklist|conhost|dllhost|memory compression|system idle process|applicationframehost|explorer)/;
+    const [running, windows] = await Promise.all([runningPrograms(), windowedPrograms()]);
+    const ok = (e) => e.endsWith(".exe") && !skip.test(e) && !GENERIC.has(e);
+    const apps = [...new Map(windows.filter((w) => ok(w.exe)).map((w) => [w.exe, w])).values()].sort((a, b) => a.exe.localeCompare(b.exe));
+    const shown = new Set(apps.map((a) => a.exe));
+    return { apps, other: running.filter((e) => ok(e) && !shown.has(e)).sort() };
   }
 
   return { scan, candidates, running: () => lastRunning, info: () => ({ games: db ? Object.keys(db).length : 0, updatedAt }) };

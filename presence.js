@@ -74,6 +74,8 @@ const hm = (min) => {
   return `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m`;
 };
 
+const short = (min) => (min < 60 ? `${Math.max(0, Math.floor(min))}m` : hm(min));
+
 // ▰▰▰▱▱▱▱▱▱▱ - Discord renders its own font, so the "design" has to come from plain characters
 const bar = (pct, cells = 10) => {
   const filled = Math.round(Math.min(1, Math.max(0, pct)) * cells);
@@ -110,14 +112,19 @@ export function buildActivity(stats, largeImage, privacy = {}) {
   ].filter(Boolean);
   if (details.length) activity.details = details.join("  ·  ");
 
-  // In a game, the game is the headline: the top line is its name, and your status in the member
-  // list reads "Playing Elden Ring" instead of "Playing grind tracker" (status display type 2 = details).
+  // Your status in the member list (right side of a server) is "Playing <something>". Settings → Privacy:
+  //   stats (default) → "Playing Elden Ring · 1h 20m" in a game, "Playing 2h 14m studied · …" otherwise
+  //   game            → "Playing Elden Ring" in a game, "Playing grind tracker" otherwise
+  //   name            → always "Playing grind tracker"
+  // (status display type 2 = Discord shows the details line there instead of the app's name)
+  const listStatus = stats.prefs?.listStatus ?? "stats";
   if (mode === "gaming" && p.game && !focus?.endsAt) {
-    activity.details = game.name.slice(0, 128);
+    const mins = game.since ? (Date.now() - game.since) / 60000 : played.todayMinutes;
+    activity.details = (listStatus === "stats" && p.playTime ? `${game.name} · ${short(mins)}` : game.name).slice(0, 128);
     const line = [p.playTime && `${hm(played.todayMinutes)} played today`, p.studyTime && `${hm(study.todayMs / 60000)} studied`, p.level && stats.progress && `lv ${stats.progress.level}`].filter(Boolean);
     activity.state = (custom || line.join("  ·  ") || "playing").slice(0, 128);
-    activity.statusDisplayType = 2;
-  }
+    if (listStatus !== "name") activity.statusDisplayType = 2;
+  } else if (listStatus === "stats" && activity.details) activity.statusDisplayType = 2;
 
   if (p.timer) {
     // focus/break phases count down; everything else counts up
@@ -133,7 +140,7 @@ export function buildActivity(stats, largeImage, privacy = {}) {
     if (big) {
       activity.largeImageKey = big;
       const hover = [
-        activity.statusDisplayType === 2 && `playing ${game.name}`,
+        mode === "gaming" && p.game && game && `playing ${game.name}`,
         p.level && stats.progress && `lv ${stats.progress.level} ${stats.progress.rank.toLowerCase()}`,
         p.goal && `${p.studyTime ? `${hm(study.todayMs / 60000)} of ` : ""}${hm(study.goalMinutes)} goal`,
       ].filter(Boolean);

@@ -535,9 +535,10 @@ function renderDiscord(d) {
       ? "Open the Discord desktop app and it'll connect automatically."
       : "Click the Discord chip (top right) to connect your profile.";
 
-  const a = d.activity;
+  const a = d.activity ?? { details: "Hidden on Discord (Settings → Privacy)", state: "" };
   $("dcDetails").textContent = a.details;
   $("dcState").textContent = a.state;
+  $("dcList").textContent = listLine(d.activity);
   const img = $("dcImg");
   const src = a.largeImageKey?.startsWith("http") ? a.largeImageKey : a.largeImageKey ? "img/logo-small.png" : null;
   if (img.dataset.src !== (src ?? "")) {
@@ -551,6 +552,9 @@ function renderDiscord(d) {
     }
   }
 }
+
+// the member list shows "Playing" + the details line (status display type 2) or the app's name
+const listLine = (a) => (a ? `Playing ${a.statusDisplayType === 2 && a.details ? a.details : "grind tracker"}` : "Hidden");
 
 // the game you're in right now (Steam or detected on your PC), under "Played today"
 function renderNowPlaying() {
@@ -1085,7 +1089,7 @@ function tick() {
     say("goal");
   }
 
-  const start = discord.activity.startTimestamp;
+  const start = discord.activity?.startTimestamp;
   $("dcTime").textContent = start ? `${hms(nowServer - start)} elapsed` : "";
 
   // live timer in the browser tab, so you can see it from any other tab
@@ -1753,6 +1757,9 @@ function renderSettings(full = false) {
 
   renderSubjectGoalSettings();
   renderStatusChips();
+  const ls = stats.prefs?.listStatus ?? "stats";
+  document.querySelectorAll("#lsOpts button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.ls === ls)));
+  $("lsNow").textContent = listLine(stats.discord?.activity);
   renderAutoStudy();
 
   // privacy
@@ -1903,24 +1910,48 @@ $("wkIn").addEventListener("change", (e) => Number(e.target.value) >= 1 && saveS
 
 // ---- games
 $("gDetect").addEventListener("change", (e) => saveSetting({ games: { detect: e.target.checked } }));
+// running programs for the "add a program" pickers: open apps (with their window title) first
+const windowTitles = {};
 async function loadPrograms(id = "gPick") {
+  const pick = $(id);
+  const keep = pick.value;
+  const opt = (value, text, sub) => {
+    const o = Object.assign(el("option", null, text), { value });
+    if (sub) o.dataset.sub = sub;
+    return o;
+  };
+  if (pick.options.length <= 1) pick.replaceChildren(opt("", "Loading running programs…"));
   try {
-    const { list } = await api("/api/processes");
-    const pick = $(id);
-    const keep = pick.value;
-    pick.replaceChildren(el("option", null, list.length ? "Choose a running program…" : "No programs found"), ...list.map((exe) => Object.assign(el("option", null, exe), { value: exe })));
-    pick.firstChild.value = "";
-    if (list.includes(keep)) pick.value = keep;
+    const { apps, other } = await api("/api/processes");
+    for (const a of apps) windowTitles[a.exe] = a.title;
+    const group = (label, opts) => {
+      if (!opts.length) return [];
+      const g = el("optgroup");
+      g.label = label;
+      g.append(...opts);
+      return [g];
+    };
+    pick.replaceChildren(
+      opt("", apps.length || other.length ? "Choose a running program…" : "No programs found"),
+      ...group("Open apps", apps.map((a) => opt(a.exe, a.exe, a.title))),
+      ...group("Running in the background", other.map((exe) => opt(exe, exe)))
+    );
+    if ([...pick.options].some((o) => o.value === keep)) pick.value = keep;
   } catch (err) {
     toast(err.message, true);
   }
 }
-const niceName = (exe) => exe.replace(/\.exe$/i, "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+// "README.md - project - Visual Studio Code" → "Visual Studio Code"; otherwise tidy up the .exe name
+const niceName = (exe) => {
+  const parts = windowTitles[exe]?.split(/\s[-—|]\s/) ?? [];
+  const last = parts.length > 1 ? parts.pop().trim() : ""; // only "… - App" titles name the app; others are song names etc.
+  return last && last.length <= 40 ? last : exe.replace(/\.exe$/i, "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+};
 for (const [pick, refresh, name] of [["gPick", "gRefresh", "gName"], ["asPick", "asRefresh", "asName"]]) {
   $(refresh).addEventListener("click", () => loadPrograms(pick));
   $(pick).addEventListener("focus", () => $(pick).options.length <= 1 && loadPrograms(pick));
   $(pick).addEventListener("change", (e) => {
-    if (!$(name).value && e.target.value) $(name).value = niceName(e.target.value);
+    if (e.target.value) $(name).value = niceName(e.target.value);
   });
 }
 
@@ -1974,6 +2005,9 @@ function renderStatusChips() {
     })
   );
 }
+document.querySelectorAll("#lsOpts button").forEach((b) =>
+  b.addEventListener("click", () => saveSetting({ listStatus: b.dataset.ls }, `Member list: ${b.querySelector("b").textContent.toLowerCase()}`))
+);
 $("stForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (await saveSetting({ status: { add: $("stIn").value } }, "Status added")) $("stIn").value = "";
@@ -2283,5 +2317,12 @@ $("quitBtn").addEventListener("click", async () => {
 
 tick();
 refresh();
-setInterval(refresh, 5000);
-setInterval(tick, 1000);
+// minimized / hidden window: no polling or per-second redraws (the server keeps tracking on its own);
+// coming back refreshes straight away
+setInterval(() => !document.hidden && refresh(), 5000);
+setInterval(() => !document.hidden && tick(), 1000);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  tick();
+  refresh();
+});

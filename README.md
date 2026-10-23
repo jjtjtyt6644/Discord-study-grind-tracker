@@ -58,7 +58,8 @@ You also need the **Discord desktop app** running. Rich Presence doesn't work in
 - **Achievements** for any recently played game: completion, your **rarest unlock** (the % of all players who have it), latest unlocks, and the **easiest ones to get next**.
 
 **Discord**
-- A **Rich Presence card** that updates every 15s: study and play time, level, current subject or game, a goal bar, and a focus countdown. **In a game, the game is the headline**: your status reads "Playing Elden Ring" (with its icon) instead of "Playing grind tracker", for Steam and non-Steam games alike.
+- A **Rich Presence card** that updates every 15s: study and play time, level, current subject or game, a goal bar, and a focus countdown. **In a game, the game is the headline** (with its icon), for Steam and non-Steam games alike.
+- **Member list status**: what people see next to your name in a server. By default it's **"Playing Elden Ring · 1h 20m"** in a game and your stats ("Playing 2h 14m studied · …") otherwise. Or just the game's name, or the classic "Playing grind tracker" (⚙ Settings → Privacy).
 - **Custom status**: your own line like "cramming for finals". Pick one from the dashboard's Discord card, or manage them in ⚙ Settings → Privacy.
 - **Privacy controls**: choose exactly what the card shows (study time, play time, level, subject, game, goal bar, timer, picture, Steam button), with a live preview. Or hide it completely. Everything is on by default.
 
@@ -116,7 +117,7 @@ Then set **Game details** to **Public** in your [Steam privacy settings](https:/
 | Set your Discord status line | **Status** under the Discord card on the dashboard |
 | See how your week went | **Weekly report →** on the Last 7 days card, or <kbd>W</kbd> |
 | Add a note to a session | **Today's log** → **+ note** (✎ to change it) |
-| A game isn't detected | ⚙ **Settings → Games** → pick it from *Choose a running program*, name it, **Add** |
+| A game isn't detected | ⚙ **Settings → Games** → pick it from *Choose a running program* (open apps are listed first, and you can type to search), name it, **Add** |
 | Use the focus timer | Switch the Session card to **Focus**, then **Start focus** (or <kbd>Space</kbd>) |
 | Choose what Discord shows | ⚙ **Settings → Privacy** |
 | Settings | ⚙ (top right) or <kbd>G</kbd>: **Goals**, **Focus timer**, **Privacy**, **Notifications**, **Appearance**, **Games**, **Auto-start**, **App**, **Updates**, **Connections**, **Data & backups**, **Shortcuts**. Everything saves instantly |
@@ -222,7 +223,7 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`):
 | `notify.js` | Windows notifications and reminders (goal, budget heads-up, break, nudge, daily recap, weekly report) |
 | `games.js` | Game detection: Discord's public list of games (cached weekly) matched against running programs, plus your own programs |
 | `vocab.js` | Studying/Working wording for the Discord card, quests, badges and notifications |
-| `public/` | Dashboard (`index.html`, `app.js`), Guide/About (`guide.html`, `about.html`, `pages.js`), background (`bg.js`), styles, and art |
+| `public/` | Dashboard (`index.html`, `app.js`, themed dropdowns in `select.js`), Guide/About (`guide.html`, `about.html`, `pages.js`), background (`bg.js`), styles, and art |
 | `scripts/` | `make-logo.mjs` and `build-exe.mjs` |
 
 Everything runs locally. Your keys and study data never leave your computer, apart from the calls to the Steam API and to your own Discord app.

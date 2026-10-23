@@ -256,6 +256,7 @@
             </div>
           </div>
         </div>
+        <div class="dc-list" title="What the member list on the right of a server shows (Settings → Privacy)"><i class="ls-av"></i><span>Member list: <b id="dcList">Playing grind tracker</b></span></div>
         <label class="status-pick">
           <span>Status</span>
           <select id="statusPick" class="sel" aria-label="Status on your Discord card" data-raw></select>
@@ -513,6 +514,16 @@
               </div>
               <p class="pv-hidden" id="pvHidden" hidden>Nothing is shown on Discord.</p>
             </div>
+          </div>
+          <div class="set-card">
+            <b>Status in the member list</b>
+            <p>What people see next to your name on the right side of a server, after “Playing”.</p>
+            <div class="ls-opts" id="lsOpts" role="radiogroup" aria-label="Member list status">
+              <button type="button" role="radio" data-ls="stats"><b>Time &amp; stats</b><small>Elden Ring · 1h 20m<br>2h 14m studied · …</small></button>
+              <button type="button" role="radio" data-ls="game"><b>Game name</b><small>Elden Ring<br>grind tracker</small></button>
+              <button type="button" role="radio" data-ls="name"><b>App name</b><small>grind tracker<br>grind tracker</small></button>
+            </div>
+            <div class="ls-preview"><i class="ls-av"></i><span><b>you</b><small id="lsNow"></small></span><em>right now</em></div>
           </div>
           <div class="set-card">
             <b>Custom status</b>
@@ -832,6 +843,7 @@
   </div>
 
   <script src="bg.js"></script>
+  <script src="select.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

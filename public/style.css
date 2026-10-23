@@ -1140,7 +1140,7 @@ button.chip:hover { border-color: var(--accent); color: var(--text); }
 .now.detected .cap { position: static; padding: 0; background: none; }
 
 .status-pick { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.status-pick span { font: 600 11px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.status-pick > span { font: 600 11px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .status-pick select { flex: 1; min-width: 0; height: 34px; }
 
 .subj-goals { margin: -4px 0 14px; }
@@ -1211,3 +1211,68 @@ dialog.week-dlg { width: min(560px, calc(100vw - 24px)); padding: 26px; }
 .cta-row:has(.side-btn:not([hidden])) .cta kbd { display: none; }
 .privacy-grid > * { min-width: 0; }
 .pv-preview { grid-template-columns: minmax(0, 1fr); }
+
+/* ============ themed dropdowns (select.js) + small polish ============ */
+select.dd-native { display: none !important; }
+.dd { display: inline-flex; align-items: center; gap: 8px; text-align: left; cursor: pointer; min-width: 0; padding-right: 10px; }
+.dd:disabled { opacity: .5; cursor: default; }
+.dd-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd::after { content: ""; flex: none; width: 10px; height: 6px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238d92ab' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat center; transition: transform .2s; }
+.dd.open::after { transform: rotate(180deg); }
+.dd:hover:not(:disabled), .dd.open { border-color: color-mix(in srgb, var(--accent) 60%, var(--line-2)); }
+.dd.ach-pick { background-image: none; padding-right: 10px; }
+.add-prog .dd, .status-pick .dd { width: 100%; height: 38px; }
+.status-pick .dd { height: 34px; flex: 1; }
+.as-add #asPick + .dd { grid-column: span 2; }
+
+.dd-menu {
+  position: fixed; z-index: 1000; display: flex; flex-direction: column; overflow: hidden;
+  padding: 6px; border-radius: 12px; border: 1px solid var(--line-2);
+  background: color-mix(in srgb, #0d0e18 94%, var(--accent)); box-shadow: 0 18px 50px -12px rgba(0,0,0,.8), 0 0 0 1px rgba(0,0,0,.4);
+  animation: ddIn .14s ease-out; text-transform: none; letter-spacing: normal;
+}
+.dd-menu[hidden] { display: none; }
+.dd-menu.up { animation-name: ddInUp; }
+@keyframes ddIn { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes ddInUp { from { opacity: 0; transform: translateY(4px); } }
+.dd-search { flex: none; height: 34px; margin: 0 0 6px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: rgba(0,0,0,.35); color: var(--text); font: 500 13px Inter, system-ui, sans-serif; }
+.dd-search[hidden] { display: none; }
+.dd-list { overflow-y: auto; min-height: 0; outline: none; }
+.dd-opt { display: grid; gap: 1px; padding: 8px 10px 8px 26px; border-radius: 8px; cursor: pointer; position: relative; font: 500 13px Inter, system-ui, sans-serif; color: var(--text); }
+.dd-opt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-opt small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 11px; }
+.dd-opt.active { background: var(--surface-3); }
+.dd-opt[aria-selected="true"] { color: var(--accent); }
+.dd-opt[aria-selected="true"]::before { content: "✓"; position: absolute; left: 9px; top: 8px; font-size: 12px; }
+.dd-opt[aria-disabled] { opacity: .4; cursor: default; }
+.dd-group { padding: 10px 10px 4px; font: 700 10px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.dd-empty { padding: 12px 10px; color: var(--dim); font-size: 12px; }
+
+/* scrollbars that match the theme (they were bright gray on Windows) */
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 35%, #2a2c3d) transparent; }
+::selection { background: color-mix(in srgb, var(--accent) 40%, transparent); }
+/* number fields: arrow keys still work, the gray spinner buttons are gone */
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+/* member-list status (Settings → Privacy + Discord card) */
+.ls-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.ls-opts button { display: grid; gap: 6px; padding: 12px; border-radius: 10px; text-align: left; cursor: pointer; border: 1px solid var(--line-2); background: var(--surface-2); color: var(--text); }
+.ls-opts button b { font: 600 13px var(--display); }
+.ls-opts button small { color: var(--dim); font: 500 11px/1.5 var(--mono); }
+.ls-opts button:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line-2)); }
+.ls-opts button[aria-checked="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.ls-opts button[aria-checked="true"] b::after { content: " ✓"; color: var(--accent); }
+.ls-preview, .dc-list { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 8px 12px; border-radius: 8px; background: #2b2d31; font-family: "gg sans", "Noto Sans", system-ui, sans-serif; }
+.ls-av { width: 28px; height: 28px; flex: none; border-radius: 50%; position: relative; background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+.ls-av::after { content: ""; position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; border-radius: 50%; background: #23a55a; border: 2px solid #2b2d31; }
+.ls-preview span { display: grid; min-width: 0; flex: 1; }
+.ls-preview b { color: #f2f3f5; font-size: 14px; font-weight: 600; }
+.ls-preview small, .dc-list span { color: #b5bac1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ls-preview small::first-letter { font-weight: 600; }
+.ls-preview em { font: 600 10px var(--mono); font-style: normal; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.dc-list b { color: #dbdee1; font-weight: 600; }
+.dc-list .ls-av { width: 22px; height: 22px; }
+@media (max-width: 560px) { .ls-opts { grid-template-columns: 1fr; } }
+.dd > .dd-label { display: block; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; gap: 0; margin: 0; }
+.dd.ach-pick { flex-shrink: 0; max-width: 60%; }
