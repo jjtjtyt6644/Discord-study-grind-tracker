@@ -19,9 +19,13 @@ window.BG = (() => {
   const shooters = [];
   const sparks = [];
   const artFrame = $("artFrame");
+  // The background drifts slowly, so 30 fps looks the same as 144 - and every frame also re-blurs
+  // the glass cards on top of it. Confetti and shooting stars get full speed while they're on screen.
+  const FRAME_MS = 1000 / 30;
+  let lastDraw = 0;
 
   function resize() {
-    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const dpr = Math.min(devicePixelRatio || 1, 1.25); // soft gradients don't need full 4K/retina pixels
     w = innerWidth;
     h = innerHeight;
     c.width = w * dpr;
@@ -40,11 +44,19 @@ window.BG = (() => {
   });
   const rgba = (col, a) => `rgba(${col[0] | 0},${col[1] | 0},${col[2] | 0},${a})`;
 
+  // easing that moves the same amount per second at any frame rate (rate = share per 60 fps frame)
+  const ease = (rate, steps) => 1 - Math.pow(1 - rate, steps);
+
   function frame(ms) {
+    if (!reduceMotion && !sparks.length && !shooters.length && ms - lastDraw < FRAME_MS - 1) return requestAnimationFrame(frame);
+    const steps = lastDraw ? Math.min(6, (ms - lastDraw) / (1000 / 60)) : 1; // 60 fps frames since the last draw
+    lastDraw = ms;
     const t = ms / 1000;
-    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) cur[i][j] += (target[i][j] - cur[i][j]) * 0.025;
-    mouse.x += (mouse.tx - mouse.x) * 0.05;
-    mouse.y += (mouse.ty - mouse.y) * 0.05;
+    const kc = ease(0.025, steps);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) cur[i][j] += (target[i][j] - cur[i][j]) * kc;
+    const km = ease(0.05, steps);
+    mouse.x += (mouse.tx - mouse.x) * km;
+    mouse.y += (mouse.ty - mouse.y) * km;
 
     ctx.globalCompositeOperation = "source-over";
     ctx.fillStyle = "#07080f";
@@ -78,7 +90,7 @@ window.BG = (() => {
     }
 
     for (const s of stars) {
-      if (!reduceMotion) s.x = (s.x + 0.00002 * s.z) % 1;
+      if (!reduceMotion) s.x = (s.x + 0.00002 * s.z * steps) % 1;
       const px = s.x * w + (mouse.x - 0.5) * -30 * s.z;
       const py = s.y * h + (mouse.y - 0.5) * -30 * s.z;
       const a = 0.2 + 0.6 * Math.abs(Math.sin(t * s.z * 1.4 + s.tw));
@@ -88,7 +100,7 @@ window.BG = (() => {
       ctx.fill();
     }
 
-    if (!reduceMotion && Math.random() < 0.004) {
+    if (!reduceMotion && Math.random() < 0.004 * steps) {
       shooters.push({ x: Math.random() * w * 0.7, y: Math.random() * h * 0.4, vx: -(6 + Math.random() * 5), vy: 2.5 + Math.random() * 2.5, life: 1 });
     }
     for (let i = shooters.length - 1; i >= 0; i--) {

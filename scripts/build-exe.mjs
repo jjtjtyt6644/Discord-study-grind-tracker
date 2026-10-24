@@ -4,6 +4,8 @@
 //   2. pack it with the dashboard files into a Node "single executable application" blob
 //   3. copy this machine's node.exe, give it our icon + version info, inject the blob
 //   4. flip the exe to the Windows GUI subsystem so no black console window opens
+//   5. recompute the PE checksum: every edit above invalidates it, and a wrong checksum makes
+//      antivirus scanners tag the file "corrupt" / tampered (a big source of false positives)
 //
 // Run on Windows with the same Node version you want to ship: npm run build:exe
 import { build } from "esbuild";
@@ -80,6 +82,7 @@ await rcedit(EXE, {
 step("Injecting the app");
 await inject(EXE, "NODE_SEA_BLOB", readFileSync(blob), { sentinelFuse: "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2" });
 setGuiSubsystem(EXE);
+updateChecksum(EXE);
 
 for (const f of ["bundle.cjs", "sea-config.json", "sea-prep.blob"]) rmSync(path.join(DIST, f));
 console.log(`\n✓ ${path.relative(ROOT, EXE)} (${(statSync(EXE).size / 1048576).toFixed(1)} MB, v${version})`);
@@ -112,6 +115,22 @@ function stripSignature(file) {
 function setGuiSubsystem(file) {
   const buf = readFileSync(file);
   buf.writeUInt16LE(2, peOptionalHeader(buf) + 68);
+  writeFileSync(file, buf);
+}
+
+// The PE checksum (optional header + 64): 16-bit one's-complement sum of the whole file with the
+// checksum field itself skipped, plus the file length. Same result as Windows' CheckSumMappedFile.
+function updateChecksum(file) {
+  const buf = readFileSync(file);
+  const field = peOptionalHeader(buf) + 64;
+  let sum = 0;
+  for (let i = 0; i < buf.length; i += 2) {
+    if (i === field || i === field + 2) continue;
+    sum += i + 1 < buf.length ? buf.readUInt16LE(i) : buf[i];
+    sum = (sum & 0xffff) + (sum >>> 16);
+  }
+  sum = (sum & 0xffff) + (sum >>> 16);
+  buf.writeUInt32LE((sum + buf.length) >>> 0, field);
   writeFileSync(file, buf);
 }
 
