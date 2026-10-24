@@ -1747,6 +1747,7 @@ function renderSettings(full = false) {
   // games
   const gs = stats.games ?? {};
   $("gDetect").checked = gs.detect !== false;
+  $("gEndStudy").checked = gs.endStudy !== false;
   $("gDbInfo").textContent = gs.games
     ? `Watching for ${gs.games.toLocaleString()} games from Discord's list (updated ${ago(gs.updatedAt)}), plus your own programs.`
     : "Downloading Discord's game list… (needs internet once; it's cached after that)";
@@ -1857,6 +1858,16 @@ $("vcRestart").addEventListener("click", () => {
   restartForUpdate();
 });
 
+$("dcReconnect").addEventListener("click", async () => {
+  try {
+    apply(await api("/api/discord/reconnect", {}));
+    toast("Reconnecting to Discord…");
+    setTimeout(refresh, 3000);
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
 $("openSetup").addEventListener("click", () => {
   settingsDlg.close();
   openSetup();
@@ -1910,6 +1921,7 @@ $("wkIn").addEventListener("change", (e) => Number(e.target.value) >= 1 && saveS
 
 // ---- games
 $("gDetect").addEventListener("change", (e) => saveSetting({ games: { detect: e.target.checked } }));
+$("gEndStudy").addEventListener("change", (e) => saveSetting({ games: { endStudy: e.target.checked } }, e.target.checked ? "Opening a game will end your study session" : "Games won't end your study session"));
 // running programs for the "add a program" pickers: open apps (with their window title) first
 const windowTitles = {};
 async function loadPrograms(id = "gPick") {

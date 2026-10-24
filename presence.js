@@ -1,4 +1,9 @@
 // Discord Rich Presence: shows your study/play stats on your profile while Discord desktop is open.
+//
+// Self-healing: the RPC library can lose its pipe to Discord (Discord restarts or updates, the PC
+// sleeps) without ever firing "disconnected" - after that every update fails and the card silently
+// disappears. So a failed update, or a client that reports itself closed, throws the connection away
+// and builds a fresh one.
 let Client = null;
 let client = null;
 let clientId = null;
@@ -7,14 +12,15 @@ let enabled = false;
 let retry = null;
 let lastActivity = null;
 let lastSent = "";
+let failures = 0; // failed updates in a row
 
-function scheduleReconnect() {
+function scheduleReconnect(delay = 15_000) {
   connected = false;
   if (retry) return;
   retry = setTimeout(() => {
     retry = null;
     connect();
-  }, 15_000);
+  }, delay);
 }
 
 function connect() {
@@ -25,12 +31,41 @@ function connect() {
   c.on("ready", () => {
     if (c !== client) return;
     connected = true;
-    lastSent = "";
+    lastSent = ""; // (failures only resets once an update goes through)
     console.log("✓ Discord Rich Presence connected");
     if (lastActivity) updatePresence(lastActivity);
   });
   c.on("disconnected", () => c === client && scheduleReconnect());
   c.login().catch(() => c === client && scheduleReconnect());
+}
+
+// drop the current connection and start over (quickly the first time, then every 15s)
+function reconnect(why) {
+  if (!enabled) return;
+  console.warn(`Discord connection lost (${why}); reconnecting`);
+  connected = false;
+  lastSent = "";
+  clearTimeout(retry);
+  retry = null;
+  scheduleReconnect(failures > 3 ? 15_000 : 2_000);
+}
+
+// every 20s: a client that says it's no longer connected while we think it is = dead pipe
+setInterval(() => {
+  if (enabled && connected && client && !client.isConnected) reconnect("connection closed");
+}, 20_000).unref();
+
+/** A fresh connection now (Settings → Connections → Reconnect). Without force, only if it's broken (reopening the app). */
+export function reconnectPresence(force = true) {
+  if (!enabled) return false;
+  if (!force && connected && client?.isConnected) return false;
+  failures = 0;
+  connected = false;
+  lastSent = "";
+  clearTimeout(retry);
+  retry = null;
+  connect();
+  return true;
 }
 
 // Safe to call again with a new ID (e.g. after setup in the dashboard).
@@ -58,13 +93,20 @@ export function updatePresence(activity) {
   const json = JSON.stringify(activity);
   // Discord rate-limits presence updates, so only send real changes.
   if (!connected || json === lastSent) return;
+  if (!client?.isConnected || !client.user) return reconnect("not connected");
   lastSent = json;
   // null = the user hid their activity in Settings → Privacy
-  const req = activity ? client.user?.setActivity(activity) : client.user?.clearActivity();
-  req?.catch((e) => {
-    console.error("! Discord rejected the activity:", e?.message ?? e);
-    lastSent = "";
-  });
+  const c = client;
+  const req = activity ? c.user.setActivity(activity) : c.user.clearActivity();
+  req
+    .then(() => c === client && (failures = 0))
+    .catch((e) => {
+      if (c !== client) return;
+      console.error(`! Discord rejected the activity: ${e?.message || "no message"} (code ${e?.code ?? "?"})`);
+      lastSent = "";
+      failures++;
+      reconnect(`update failed, code ${e?.code ?? "?"}`);
+    });
 }
 
 export const presenceState = () => ({ enabled, connected });

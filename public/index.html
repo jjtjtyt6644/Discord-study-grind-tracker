@@ -633,6 +633,10 @@
               <span><b>Detect games automatically</b><small id="gDbInfo">Uses Discord's own list of detectable games, matched against the programs you're running.</small></span>
               <input type="checkbox" id="gDetect" role="switch">
             </label>
+            <label class="switch-row">
+              <span><b>Opening a game ends my study session</b><small>The session so far is saved and you switch to gaming. A game that was already open when you started isn't affected.</small></span>
+              <input type="checkbox" id="gEndStudy" role="switch">
+            </label>
           </div>
           <div class="set-card now-game" id="gNow"></div>
           <div class="set-card">
@@ -721,7 +725,7 @@
 
         <section class="set-pane" data-pane="connections">
           <div class="set-card conn">
-            <div class="conn-row"><span class="conn-ic discord">D</span><div><b>Discord</b><small id="connDiscord"></small></div><i class="dot" id="connDiscordDot"></i></div>
+            <div class="conn-row"><span class="conn-ic discord">D</span><div><b>Discord</b><small id="connDiscord"></small></div><button type="button" class="btn-ghost conn-fix" id="dcReconnect" title="Not showing on your profile? Reconnect to Discord">Reconnect</button><i class="dot" id="connDiscordDot"></i></div>
             <div class="conn-row"><span class="conn-ic steam">S</span><div><b>Steam</b><small id="connSteam"></small></div><i class="dot" id="connSteamDot"></i></div>
           </div>
           <button type="button" class="btn-solid wide" id="openSetup">Edit connections</button>

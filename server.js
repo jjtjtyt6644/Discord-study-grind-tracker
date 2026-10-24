@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import { isDesktop, ROOT, APP_DIR, ART_DIR, VERSION, readAsset, hasCustomArt, openAppWindow, findPortOwner, askYesNo, closeProcess, autostartSupported, getAutostart, setAutostart } from "./desktop.js";
 import { getSteam, getAchievementsFor, clearSteamCache, resolveSteamId, verifySteam } from "./steam.js";
-import { startPresence, updatePresence, presenceState, buildActivity, PRIVACY_DEFAULTS } from "./presence.js";
+import { startPresence, updatePresence, presenceState, buildActivity, reconnectPresence, PRIVACY_DEFAULTS } from "./presence.js";
 import { createFocus } from "./focus.js";
 import { questsToday, questTotals, QUEST_XP, ALL_QUESTS_BONUS } from "./quests.js";
 import { createNotifier, startReminders, NOTIFY_DEFAULTS } from "./notify.js";
@@ -48,7 +48,7 @@ data.settings.autoUpdate ??= true;
 data.settings.privacy = { ...PRIVACY_DEFAULTS, ...data.settings.privacy };
 data.settings.notify = { ...NOTIFY_DEFAULTS, ...data.settings.notify };
 data.settings.theme ??= { preset: "mode", accent: null, accent2: null };
-data.settings.games = { detect: true, custom: [], ignore: [], ...data.settings.games };
+data.settings.games = { detect: true, endStudy: true, custom: [], ignore: [], ...data.settings.games };
 data.settings.activity ??= "study"; // "study" | "work": only changes the words
 data.settings.weekendGoal ??= null; // minutes, or null = same as weekdays
 data.settings.autoStudy = { on: true, stop: true, apps: [], ...data.settings.autoStudy }; // apps: [{ exe, name, subject }]
@@ -508,7 +508,26 @@ async function scanGames() {
     save();
     pushPresence();
   } else if (data.gameLive) data.gameLive.seen = Date.now();
+  gameOpened(steamGame?.name ?? found?.name ?? null);
   autoStudy(games.running());
+}
+
+// A game that opens while you're studying ends the session (it's saved) and you switch to gaming.
+// Only an actual launch counts: a game that was already running when you pressed Start is left alone.
+let gameBefore; // game seen at the last scan (undefined until the first scan)
+function gameOpened(name) {
+  const before = gameBefore;
+  gameBefore = name;
+  if (before === undefined || !name || name === before) return;
+  if (!data.activeStudy || data.settings.games.endStudy === false) return;
+  const mins = (Date.now() - data.activeStudy) / 60_000;
+  if (focus.isFocusing()) focus.stop(); // a cut-short focus round still counts as study time
+  else stopSession();
+  data.paused = null;
+  data.autoStudy = null;
+  save();
+  pushPresence();
+  notify("auto", `${name} opened`, `Study session saved (${hmText(mins)}). Switched to gaming. Have fun!`);
 }
 
 // Settings → Auto-start: opening one of your study apps starts the timer (with that app's subject),
@@ -619,7 +638,7 @@ async function buildStats() {
     focus: focus.state(),
     progress: keepBadges(computeProgress(data, studyMin, dayKey, questTotals(data), goalFor)),
     game,
-    games: { ...games.info(), detect: data.settings.games.detect !== false, custom: data.settings.games.custom, ignore: data.settings.games.ignore, detected },
+    games: { ...games.info(), detect: data.settings.games.detect !== false, endStudy: data.settings.games.endStudy !== false, custom: data.settings.games.custom, ignore: data.settings.games.ignore, detected },
     played: {
       todayMinutes: playedMin,
       budgetMinutes: data.settings.playBudgetMinutes,
@@ -908,6 +927,10 @@ const routes = {
   },
   "POST /api/window": async () => {
     if (isDesktop) showWindow();
+    reconnectPresence(false); // opening the app again also revives a dead Discord connection
+  },
+  "POST /api/discord/reconnect": async () => {
+    if (!reconnectPresence()) throw new Error("Add your Discord Application ID first");
   },
   "POST /api/heartbeat": async () => {
     if (!win.open && isDesktop) checkIfStale(autoInstall); // window just opened
@@ -953,6 +976,7 @@ const routes = {
       const g = data.settings.games;
       const exe = (v) => (/^[\w .()+-]{1,80}\.exe$/i.test(String(v ?? "").trim()) ? String(v).trim().toLowerCase() : null);
       if (typeof body.games.detect === "boolean") g.detect = body.games.detect;
+      if (typeof body.games.endStudy === "boolean") g.endStudy = body.games.endStudy;
       if (body.games.addCustom) {
         const e = exe(body.games.addCustom.exe);
         const name = String(body.games.addCustom.name ?? "").trim().slice(0, 60) || e?.replace(/\.exe$/, "");
