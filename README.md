@@ -35,6 +35,7 @@ You also need the **Discord desktop app** running. Rich Presence doesn't work in
 - **Fix your time**: **+ Add** time you forgot to track, **− Remove** time you added by mistake, or click any entry in **Today's log** to edit or delete it.
 - **Pause**: pause a session and resume it later (<kbd>P</kbd>). The time so far is saved.
 - **Auto-start**: pick your study apps (VS Code, Notion, Anki…) in ⚙ Settings → **Auto-start**. Opening one starts the timer with that app's subject, and closing them stops it again.
+- **Only real time counts**: the timer runs while your PC is on and Grind Tracker is running (window open or not, through the night too). If the PC was off or asleep, or the app was closed, mid-session, the session ends at that point and you get a notification, with a one-click **Yes, keep it** on the dashboard if you really were studying.
 - **Sessions past midnight** are split at 00:00, so each day gets its own time and today never shows 0h while you're locked in.
 - **"Still studying?"**: after 3 hours nonstop, it checks that you didn't forget the timer.
 - **Focus timer (Pomodoro)**: switch the Session card to **Focus** for timed rounds (25/5 by default, with a long break every 4). It has a countdown ring, a chime between phases, and keeps running with the window closed. Rounds count as study time. Change the lengths right on the card with the +/− steppers, or pick Classic 25/5, Deep 50/10, Flow 90/15 or Sprint 15/3.

@@ -262,9 +262,47 @@ const nextMidnight = (t) => {
   return d.getTime();
 };
 
+// record start → end as study sessions, one piece per calendar day
+function addStudySpan(start, end, subject) {
+  for (let from = start; from < end; ) {
+    const to = Math.min(end, nextMidnight(from));
+    if (to - from >= 30_000) day(dayKey(new Date(from))).sessions.push({ start: from, end: to, subject });
+    from = to;
+  }
+}
+
+// The timer only counts while this PC is on and Grind Tracker is running. If it was closed, or the PC
+// was off or asleep, during a session (no sign of life for 5+ minutes), the session ends where it was
+// last seen running. You get a notification, and the dashboard offers to keep the missing time.
+const ALIVE_GAP = 5 * 60_000;
+let aliveSaved = 0;
+function checkGap(now = Date.now()) {
+  const last = data.lastAlive;
+  data.lastAlive = now;
+  if (last && now - last >= ALIVE_GAP && data.activeStudy && data.activeStudy < last) {
+    const subject = data.activeSubject;
+    addStudySpan(data.activeStudy, last, subject);
+    const kept = (last - data.activeStudy) / 60_000;
+    data.activeStudy = null;
+    if (focus.isFocusing()) focus.stop(); // the round is already saved above (cut short, so not a focus round)
+    data.paused = null;
+    data.autoStudy = null;
+    data.offlineGap = { from: last, to: now, subject };
+    save();
+    const at = new Date(last).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    notify("gap", "Study timer stopped", `Grind Tracker wasn't running from ${at} (PC off, asleep or app closed), so your session ended there with ${hmText(kept)} saved. Studied through it? Open the dashboard to keep the missing ${hmText((now - last) / 60_000)}.`);
+    return;
+  }
+  if (now - aliveSaved > 60_000) {
+    aliveSaved = now;
+    save(); // so a crash or power cut loses at most a minute
+  }
+}
+
 // A session (or detected game) still running after midnight is cut there, so yesterday keeps its part
 // and today starts counting from 00:00. The piece before midnight never counts as a focus round.
 function splitAtMidnight() {
+  checkGap();
   let changed = false;
   while (data.activeStudy && dayKey(new Date(data.activeStudy)) !== dayKey()) {
     const cut = nextMidnight(data.activeStudy);
@@ -618,6 +656,7 @@ async function buildStats() {
       longestSessionMs: Math.max(0, ...sessions),
       subject: data.activeSubject,
       pausedAt: data.paused?.at ?? null,
+      offlineGap: data.offlineGap ?? null,
       autoStarted: data.activeStudy && data.autoStudy ? (data.settings.autoStudy.apps.find((a) => a.exe === data.autoStudy)?.name ?? null) : null,
       log: todayLog(),
       week,
@@ -756,6 +795,15 @@ const routes = {
     stopSession();
     data.paused = { at: Date.now() };
     save();
+  },
+  // after a gap (PC off/asleep, app closed): keep that time as studied too, or just dismiss the notice
+  "POST /api/study/gap": async (body) => {
+    const g = data.offlineGap;
+    if (!g) throw new Error("Nothing to keep");
+    if (body.keep) addStudySpan(g.from, g.to, g.subject);
+    data.offlineGap = null;
+    save();
+    return { kept: body.keep ? Math.round((g.to - g.from) / 60_000) : 0 };
   },
   "POST /api/study/resume": async () => {
     if (!data.paused) throw new Error("Nothing is paused");

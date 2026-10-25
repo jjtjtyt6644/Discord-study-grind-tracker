@@ -171,6 +171,7 @@ function render() {
   renderHeatmap();
   renderMarquee();
   renderUpdate();
+  renderGap();
   renderActivity();
   renderFocus();
   renderQuests();
@@ -179,6 +180,42 @@ function render() {
   if (settingsDlg.open) renderSettings();
   maybeOpenSetup();
   window.GT_vocab(stats.prefs?.activity); // studied → worked etc. everywhere, if Working is on
+}
+
+/* ================= timer stopped while the app wasn't running ================= */
+function renderGap() {
+  const g = stats.study.offlineGap;
+  const bar = $("gapBar");
+  const sig = JSON.stringify(g);
+  if (bar.dataset.sig === sig) return;
+  bar.dataset.sig = sig;
+  bar.hidden = !g;
+  if (!g) return;
+  const when = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+  const gapMin = (g.to - g.from) / 60000;
+  const answer = async (keep) => {
+    try {
+      const out = await api("/api/study/gap", { keep });
+      apply(out);
+      toast(keep ? `Kept ${hm(out.result.kept)} as studied` : "Okay, that time stays uncounted");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  };
+  const btn = (text, cls, fn) => {
+    const b = el("button", `ub-btn ${cls}`, text);
+    b.type = "button";
+    b.addEventListener("click", fn);
+    return b;
+  };
+  bar.replaceChildren(
+    el("span", "ub-dot err"),
+    el("b", null, "Your timer stopped while Grind Tracker wasn't running."),
+    el("span", null, `Nothing was counted from ${when(g.from)} to ${when(g.to)} (${hm(gapMin)}): the PC was off or asleep, or the app was closed. Were you studying the whole time?`),
+    btn(`Yes, keep ${hm(gapMin)}`, "solid", () => answer(true)),
+    btn("No", "ghost", () => answer(false))
+  );
+  window.GT_vocab(stats.prefs?.activity);
 }
 
 /* ================= updates ================= */
