@@ -1,6 +1,6 @@
 {
   "name": "grind-tracker",
-  "version": "1.7.4",
+  "version": "1.7.5",
   "description": "Study + gaming stats dashboard that shows on your Discord profile via Rich Presence",
   "type": "module",
   "main": "server.js",

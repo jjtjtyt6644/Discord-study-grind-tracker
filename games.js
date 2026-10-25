@@ -1,10 +1,14 @@
 // Detects running games the way Discord does: Discord publishes the list of games it can detect
 // (≈10k with Windows .exe names). We cache a compact version, refresh it weekly, and match it
 // against the programs that are running. Users can add their own programs or ignore false hits.
+//
+// Most entries include part of the game's folder ("6.0.0/dotnet.exe" is tModLoader's bundled .NET,
+// not every .NET program), so a match needs the running program's real path to end with it.
 import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 
 const DB_URL = "https://discord.com/api/v9/applications/detectable";
+const DB_VERSION = 2; // bump when the cached format changes
 const REFRESH_EVERY = 7 * 24 * 3600e3;
 
 // .exe names that host many different apps (javaw = Minecraft *and* every other Java program),
@@ -16,20 +20,41 @@ const GENERIC = new Set([
   "unitycrashhandler64.exe", "unitycrashhandler32.exe", "crashpad_handler.exe", "launcher.exe", "game.exe", "start.exe",
   "setup.exe", "update.exe", "updater.exe", "uninstall.exe", "client.exe", "app.exe", "main.exe", "run.exe", "bootstrapper.exe",
 ]);
+// runtimes some games bundle: fine when the folder matches, never on the name alone
+const RUNTIMES = new Set(["dotnet.exe", "busybox.exe", "busybox64.exe", "mono.exe", "nw.exe", "love.exe", "dosbox.exe", "hl2.exe", "python3.exe"]);
 
 const base = (p) => p.replace(/^>/, "").split(/[\\/]/).pop().toLowerCase();
 const iconUrl = (id, hash) => (hash ? `https://cdn.discordapp.com/app-icons/${id}/${hash}.png?size=256` : null);
 
-/** Running program names (lowercase .exe basenames). */
-function runningPrograms() {
+/** Running processes: [{ exe (lowercase basename), pid }]. */
+function listProcesses() {
   return new Promise((resolve) => {
     if (process.platform !== "win32") {
-      execFile("ps", ["-A", "-o", "comm="], (err, out) => resolve(err ? [] : out.split("\n").map((l) => base(l.trim())).filter(Boolean)));
+      execFile("ps", ["-A", "-o", "pid=,comm="], (err, out) =>
+        resolve(err ? [] : out.split("\n").map((l) => l.trim().match(/^(\d+)\s+(.+)$/)).filter(Boolean).map((m) => ({ pid: Number(m[1]), exe: base(m[2]) })))
+      );
       return;
     }
     execFile("tasklist", ["/FO", "CSV", "/NH"], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (err, out) => {
       if (err) return resolve([]);
-      resolve([...new Set(out.split(/\r?\n/).map((l) => l.match(/^"([^"]+)"/)?.[1]?.toLowerCase()).filter(Boolean))]);
+      resolve(out.split(/\r?\n/).map((l) => l.match(/^"([^"]+)","(\d+)"/)).filter(Boolean).map((m) => ({ exe: m[1].toLowerCase(), pid: Number(m[2]) })));
+    });
+  });
+}
+const runningPrograms = async () => [...new Set((await listProcesses()).map((p) => p.exe))];
+
+/** Full paths for these process ids (lowercase, "/" separators; "" when Windows won't say, e.g. anti-cheat games). */
+function processPaths(pids) {
+  return new Promise((resolve) => {
+    if (!pids.length || process.platform !== "win32") return resolve(new Map());
+    const ps = `Get-Process -Id ${pids.join(",")} -ErrorAction SilentlyContinue | ForEach-Object { [string]$_.Id + [char]9 + $_.Path }`;
+    execFile("powershell", ["-NoProfile", "-NonInteractive", "-Command", ps], { windowsHide: true, timeout: 8000 }, (err, out) => {
+      const map = new Map(pids.map((p) => [p, ""]));
+      for (const line of (out ?? "").split(/\r?\n/)) {
+        const [pid, path] = line.split("\t");
+        if (pid && map.has(Number(pid))) map.set(Number(pid), (path ?? "").trim().toLowerCase().replace(/\\/g, "/"));
+      }
+      resolve(map);
     });
   });
 }
@@ -57,8 +82,10 @@ function windowedPrograms() {
  * @param getSettings () => { detect, custom: [{exe, name}], ignore: [exe] }
  */
 export function createGameDetector({ cacheFile, getSettings }) {
-  let db = null; // exe basename -> { name, id, icon }
+  let db = null; // exe basename -> [{ path: "folder/game.exe" | null, name, id, icon }]
   let updatedAt = 0;
+  let gameCount = 0;
+  const pathCache = new Map(); // pid -> full path ("" = unknown); a process's path never changes
   let loading = null;
   let lastRunning = []; // every program seen by the last scan (auto-start studying reads this too)
 
@@ -71,26 +98,31 @@ export function createGameDetector({ cacheFile, getSettings }) {
       for (const g of list) {
         for (const e of g.executables ?? []) {
           if (e.os !== "win32" || e.is_launcher) continue;
-          const exe = base(e.name);
-          if (!exe.endsWith(".exe") || GENERIC.has(exe) || map[exe]) continue;
-          map[exe] = { name: g.name, id: g.id, icon: iconUrl(g.id, g.icon_hash) };
+          const full = e.name.replace(/^>/, "").toLowerCase().replace(/\\/g, "/");
+          const exe = full.split("/").pop();
+          if (!exe.endsWith(".exe") || GENERIC.has(exe)) continue;
+          (map[exe] ??= []).push({ path: full.includes("/") ? full : null, name: g.name, id: g.id, icon: iconUrl(g.id, g.icon_hash) });
         }
       }
-      db = map;
-      updatedAt = Date.now();
-      await writeFile(cacheFile, JSON.stringify({ updatedAt, games: map }));
-      console.log(`Game list updated: ${Object.keys(map).length} detectable games`);
+      setDb(map, Date.now());
+      await writeFile(cacheFile, JSON.stringify({ v: DB_VERSION, updatedAt, games: map }));
+      console.log(`Game list updated: ${gameCount} detectable games`);
     } catch (e) {
       console.error("game list update failed:", e.message); // keep using the cached list
     }
+  }
+
+  function setDb(map, at) {
+    db = map;
+    updatedAt = at;
+    gameCount = new Set(Object.values(map).flatMap((list) => list.map((e) => e.id))).size;
   }
 
   async function ensureDb() {
     if (!db) {
       try {
         const cached = JSON.parse(await readFile(cacheFile, "utf8"));
-        db = cached.games;
-        updatedAt = cached.updatedAt;
+        if (cached.v === DB_VERSION) setDb(cached.games, cached.updatedAt); // older caches get rebuilt
       } catch {}
     }
     if (!db || Date.now() - updatedAt > REFRESH_EVERY) loading ??= refresh().finally(() => (loading = null));
@@ -98,16 +130,39 @@ export function createGameDetector({ cacheFile, getSettings }) {
   }
 
   /** The game that's running now ({ name, exe, icon, source }) or null. Your own programs win over the list. */
+  // Which game (if any) this running program is. With its path known, Discord's folder part must
+  // match (".../tmodloader/dotnet/6.0.0/dotnet.exe"). Without one (protected processes hide it), only
+  // names that belong to exactly one game and aren't a bundled runtime count.
+  function identify(exe, path) {
+    const entries = db?.[exe];
+    if (!entries) return null;
+    if (path) {
+      return entries.find((e) => e.path && (path === e.path || path.endsWith(`/${e.path}`))) ?? entries.find((e) => !e.path && !RUNTIMES.has(exe)) ?? null;
+    }
+    if (RUNTIMES.has(exe) || new Set(entries.map((e) => e.id)).size !== 1) return null;
+    return entries[0];
+  }
+
+  /** The game that's running now ({ name, exe, icon, source }) or null. Your own programs win over the list. */
   async function scan() {
     const s = getSettings();
-    const running = await runningPrograms();
-    lastRunning = running;
+    const procs = await listProcesses();
+    lastRunning = [...new Set(procs.map((p) => p.exe))];
     if (s.detect === false) return null;
     await ensureDb();
     const ignore = new Set((s.ignore ?? []).map((x) => x.toLowerCase()));
     const custom = new Map((s.custom ?? []).map((c) => [c.exe.toLowerCase(), c.name]));
-    for (const exe of running) if (custom.has(exe) && !ignore.has(exe)) return { name: custom.get(exe), exe, icon: null, source: "custom" };
-    for (const exe of running) if (db?.[exe] && !ignore.has(exe)) return { ...db[exe], exe, source: "detected" };
+    for (const exe of lastRunning) if (custom.has(exe) && !ignore.has(exe)) return { name: custom.get(exe), exe, icon: null, source: "custom" };
+
+    const cands = procs.filter((p) => db?.[p.exe] && !ignore.has(p.exe));
+    const live = new Set(procs.map((p) => p.pid));
+    for (const pid of pathCache.keys()) if (!live.has(pid)) pathCache.delete(pid);
+    const unknown = cands.filter((p) => !pathCache.has(p.pid)).map((p) => p.pid);
+    for (const [pid, path] of await processPaths(unknown)) pathCache.set(pid, path);
+    for (const p of cands) {
+      const hit = identify(p.exe, pathCache.get(p.pid));
+      if (hit) return { name: hit.name, icon: hit.icon, exe: p.exe, source: "detected" };
+    }
     return null;
   }
 
@@ -124,5 +179,5 @@ export function createGameDetector({ cacheFile, getSettings }) {
     return { apps, other: running.filter((e) => ok(e) && !shown.has(e)).sort() };
   }
 
-  return { scan, candidates, running: () => lastRunning, info: () => ({ games: db ? Object.keys(db).length : 0, updatedAt }) };
+  return { scan, candidates, running: () => lastRunning, info: () => ({ games: gameCount, updatedAt }) };
 }
